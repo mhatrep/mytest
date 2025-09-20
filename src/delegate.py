@@ -8,8 +8,7 @@ class TextEditDelegate(QStyledItemDelegate):
         self.initStyleOption(options, index)
         painter.save()
         doc = QTextDocument()
-        font = doc.defaultFont()
-        font.setPointSize(12)
+        font = QFont("Consolas", 14)
         doc.setDefaultFont(font)
         doc.setHtml(options.text)
         options.text = ""

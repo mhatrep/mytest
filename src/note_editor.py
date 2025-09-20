@@ -1,4 +1,5 @@
 from PyQt6.QtWidgets import (QDialog, QLineEdit, QTextEdit, QVBoxLayout, QDialogButtonBox)
+from PyQt6.QtGui import QFont
 
 class NoteEditorDialog(QDialog):
     def __init__(self, title, content, parent=None):
@@ -6,7 +7,10 @@ class NoteEditorDialog(QDialog):
         self.setWindowTitle("Edit Note")
 
         self.title_edit = QLineEdit(title)
+
         self.content_edit = QTextEdit()
+        default_font = QFont("Consolas", 14)
+        self.content_edit.setFont(default_font)
         self.content_edit.setHtml(content)
 
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

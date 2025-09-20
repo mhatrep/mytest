@@ -258,11 +258,15 @@ class MainWindow(QMainWindow):
         colors = {
             "Default (White)": "white",
             "Pastel Red": "#ffb3ba",
-            "Pastel Green": "#baffc9",
-            "Pastel Blue": "#bae1ff",
+            "Pastel Orange": "#ffdfba",
             "Pastel Yellow": "#ffffba",
+            "Pastel Green": "#baffc9",
+            "Pastel Cyan": "#bafff8",
+            "Pastel Blue": "#bae1ff",
             "Pastel Purple": "#e0baff",
-            "Pastel Orange": "#ffdfba"
+            "Pastel Pink": "#ffbafc",
+            "Pastel Brown": "#f0dcb1",
+            "Pastel Gray": "#d3d3d3",
         }
 
         for name, hex_code in colors.items():
@@ -359,7 +363,7 @@ class MainWindow(QMainWindow):
         self.save_all_grids()
 
     def get_default_cell_data(self, position):
-        return {'title': f"Cell {position + 1}", 'content': '', 'color': 'white', 'position': position}
+        return {'title': '', 'content': '', 'color': 'white', 'position': position}
 
     def get_default_data(self):
         return [self.get_default_cell_data(j) for j in range(NUM_ROWS * NUM_COLS)]
