@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, QRectF
 from PyQt6.QtGui import QColor, QTextDocument, QFont
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTableView,
                              QHeaderView, QComboBox, QVBoxLayout, QMenu,
@@ -51,7 +51,7 @@ class TextEditDelegate(QStyledItemDelegate):
         style.drawControl(QStyle.ControlElement.CE_ItemViewItem, options, painter)
 
         painter.translate(options.rect.left() + 3, options.rect.top() + 3)
-        clip = Qt.QRectF(0, 0, options.rect.width() - 6, options.rect.height() - 6)
+        clip = QRectF(0, 0, options.rect.width() - 6, options.rect.height() - 6)
         doc.drawContents(painter, clip)
 
         painter.restore()
