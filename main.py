@@ -99,6 +99,10 @@ class GridModel(QAbstractTableModel):
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return self._data[cell_index].get('text', '')
 
+        if role == Qt.ItemDataRole.ForegroundRole:
+            if cell_index in self.highlighted_cells:
+                return QColor("black")
+
         return None
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
@@ -131,10 +135,9 @@ class GridModel(QAbstractTableModel):
 
     def set_highlights(self, indices):
         self.highlighted_cells = indices
-        # Emit dataChanged for all cells to trigger repaint
         top_left = self.index(0, 0)
         bottom_right = self.index(NUM_ROWS - 1, NUM_COLS - 1)
-        self.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.BackgroundRole])
+        self.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.BackgroundRole, Qt.ItemDataRole.ForegroundRole])
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -212,9 +215,7 @@ class MainWindow(QMainWindow):
             return
 
         found_in_current_grid = set()
-
         grids_to_search = self.grid_names if search_all else [self.current_grid_id]
-
         temp_doc = QTextDocument()
 
         for grid_name in grids_to_search:
@@ -285,10 +286,34 @@ class MainWindow(QMainWindow):
         for color_name in colors:
             action = color_menu.addAction(color_name)
             action.triggered.connect(lambda c=color_name.lower(), i=index: self.change_cell_color(i, c))
+
+        context_menu.addSeparator()
+        group_action = context_menu.addAction("Group by Color")
+        group_action.triggered.connect(self.group_by_color)
+        reset_action = context_menu.addAction("Reset Grouping")
+        reset_action.triggered.connect(self.reset_grouping)
+
         context_menu.exec(self.table_view.viewport().mapToGlobal(pos))
 
+    def group_by_color(self):
+        current_data = self.grid_data[self.current_grid_id]
+        current_data.sort(key=lambda item: item.get('color', ''))
+        self.grid_model.load_data(current_data)
+        self.save_current_grid_data()
+
+    def reset_grouping(self):
+        current_data = self.grid_data[self.current_grid_id]
+        current_data.sort(key=lambda item: item.get('position', 0))
+        self.grid_model.load_data(current_data)
+        self.save_current_grid_data()
+
     def change_cell_color(self, index, color):
-        self.grid_model.set_color(index, color)
+        selected_indexes = self.table_view.selectionModel().selectedIndexes()
+        if index in selected_indexes:
+            for selected_index in selected_indexes:
+                self.grid_model.set_color(selected_index, color)
+        else:
+            self.grid_model.set_color(index, color)
 
     def load_data(self):
         if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
@@ -300,8 +325,19 @@ class MainWindow(QMainWindow):
                 with open(file_path, 'r') as f:
                     try:
                         data = json.load(f)
-                        migrated_data = [item if isinstance(item, dict) and 'text' in item and 'color' in item else {'text': str(item), 'color': 'white'} for item in data]
-                        while len(migrated_data) < (NUM_ROWS * NUM_COLS): migrated_data.append({'text': '', 'color': 'white'})
+                        migrated_data = []
+                        for pos, item in enumerate(data):
+                            if isinstance(item, dict) and 'text' in item and 'color' in item:
+                                if 'position' not in item:
+                                    item['position'] = pos
+                                migrated_data.append(item)
+                            else:
+                                migrated_data.append({'text': str(item), 'color': 'white', 'position': pos})
+
+                        while len(migrated_data) < (NUM_ROWS * NUM_COLS):
+                            pos = len(migrated_data)
+                            migrated_data.append({'text': '', 'color': 'white', 'position': pos})
+
                         self.grid_data[grid_name] = migrated_data[:(NUM_ROWS * NUM_COLS)]
                     except (json.JSONDecodeError, TypeError):
                         self.grid_data[grid_name] = self.get_default_data()
@@ -311,7 +347,7 @@ class MainWindow(QMainWindow):
         self.save_all_grids()
 
     def get_default_data(self):
-        return [{'text': f"Cell {j + 1}", 'color': 'white'} for j in range(NUM_ROWS * NUM_COLS)]
+        return [{'text': f"Cell {j + 1}", 'color': 'white', 'position': j} for j in range(NUM_ROWS * NUM_COLS)]
 
     def save_all_grids(self):
         for i, grid_name in enumerate(self.grid_names):
@@ -330,7 +366,7 @@ class MainWindow(QMainWindow):
         self.current_grid_id = self.grid_names[index]
         data = self.grid_data[self.current_grid_id]
         self.grid_model.load_data(data)
-        self.perform_search() # Re-apply search on grid switch
+        self.perform_search()
         print(f"Switched to {self.current_grid_id}")
 
     def on_data_changed(self, topleft, bottomright, roles):
