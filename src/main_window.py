@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
 
     def group_by_color(self):
         current_data = self.grid_data[self.current_grid_id]
-        current_data.sort(key=lambda item: item.get('color', ''))
+        current_data.sort(key=lambda item: str(item.get('color', '')))
         self.grid_model.load_data(current_data)
         self.save_current_grid_data()
 
