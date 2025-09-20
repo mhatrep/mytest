@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         colors = ["White", "Red", "Green", "Blue", "Yellow"]
         for color_name in colors:
             action = color_menu.addAction(color_name)
-            action.triggered.connect(lambda checked=False, c=color_name.lower(), i=index: self.change_cell_color(i, c))
+            action.triggered.connect(lambda checked, i=index, c=color_name.lower(): self.change_cell_color(i, c))
 
         context_menu.addSeparator()
         group_action = context_menu.addAction("Group by Color")
