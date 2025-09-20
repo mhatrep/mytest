@@ -5,8 +5,7 @@ from functools import partial
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QPixmap, QIcon, QColor
-from PyQt6.QtGui import QFont, QPixmap, QIcon, QColor
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTableView,
                              QHeaderView, QComboBox, QVBoxLayout, QMenu,
                              QTextEdit, QToolBar, QPushButton, QHBoxLayout,
                              QInputDialog, QLineEdit, QCheckBox, QLabel)

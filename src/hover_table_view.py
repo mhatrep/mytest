@@ -12,9 +12,9 @@ class HoverTableView(QTableView):
 
         self.preview_label = QLabel(self, Qt.WindowType.ToolTip)
         self.preview_label.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        self.preview_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.preview_label.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.preview_label.setStyleSheet("""
-            background-color: #f0f0f0;
+            background-color: white;
             color: black;
             border: 1px solid black;
             padding: 4px;
