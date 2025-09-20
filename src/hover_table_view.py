@@ -33,10 +33,6 @@ class HoverTableView(QTableView):
             content_html = self.model()._data[cell_index].get('content', '')
 
             if content_html:
-                temp_doc = QTextDocument()
-                temp_doc.setHtml(content_html)
-                QApplication.clipboard().setText(temp_doc.toPlainText())
-
                 self.preview_label.setText(content_html)
                 self.preview_label.adjustSize()
 

@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
 
         context_menu.addSeparator()
         copy_action = context_menu.addAction("Copy Note Content")
-        copy_action.triggered.connect(lambda: self.copy_note_content(index))
+        copy_action.triggered.connect(lambda checked: self.copy_note_content(index))
 
         context_menu.addSeparator()
         group_action = context_menu.addAction("Group by Color")
