@@ -2,6 +2,7 @@ import sys
 import os
 import json
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTableView,
                              QHeaderView, QComboBox, QVBoxLayout, QMenu,
