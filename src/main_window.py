@@ -4,8 +4,9 @@ import json
 from functools import partial
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTableView,
+from PyQt6.QtGui import QFont, QPixmap, QIcon, QColor
+from PyQt6.QtGui import QFont, QPixmap, QIcon, QColor
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QHeaderView, QComboBox, QVBoxLayout, QMenu,
                              QTextEdit, QToolBar, QPushButton, QHBoxLayout,
                              QInputDialog, QLineEdit, QCheckBox, QLabel)
@@ -15,6 +16,8 @@ from .constants import *
 from .styles import LIGHT_THEME_QSS, DARK_THEME_QSS
 from .delegate import TextEditDelegate
 from .grid_model import GridModel
+from .note_editor import NoteEditorDialog
+from .hover_table_view import HoverTableView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -45,12 +48,14 @@ class MainWindow(QMainWindow):
         grid_control_layout.addWidget(rename_button)
         main_layout.addLayout(grid_control_layout)
 
-        self.table_view = QTableView()
+        self.table_view = HoverTableView()
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        # The delegate is now only for painting, not editing
         self.table_view.setItemDelegate(TextEditDelegate(self.table_view))
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table_view.customContextMenuRequested.connect(self.show_context_menu)
+        self.table_view.doubleClicked.connect(self.open_note_editor)
 
         self.grid_model = GridModel(self.grid_data[self.current_grid_id])
         self.table_view.setModel(self.grid_model)
@@ -58,6 +63,21 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.table_view)
         self.switch_grid(0)
+
+    def open_note_editor(self, index):
+        if not index.isValid():
+            return
+
+        cell_index = index.row() * NUM_COLS + index.column()
+        current_data = self.grid_model._data[cell_index]
+        title = current_data.get('title', '')
+        content = current_data.get('content', '')
+
+        dialog = NoteEditorDialog(title, content, self)
+        if dialog.exec():
+            new_title, new_content = dialog.get_data()
+            self.grid_model.set_cell_data(index, new_title, new_content)
+            self.save_current_grid_data()
 
     def create_menu(self):
         menu_bar = self.menuBar()
@@ -123,15 +143,23 @@ class MainWindow(QMainWindow):
         grids_to_search = self.grid_names if search_all else [self.current_grid_id]
         temp_doc = QTextDocument()
 
-        search_flags = Qt.CaseSensitivity.CaseSensitive if case_sensitive else Qt.CaseSensitivity.CaseInsensitive
-
         for grid_name in grids_to_search:
             grid_index = self.grid_names.index(grid_name)
             for i, cell_data in enumerate(self.grid_data[grid_name]):
-                temp_doc.setHtml(cell_data.get('text', ''))
-                plain_text = temp_doc.toPlainText()
+                # Search in both title and content
+                temp_doc.setHtml(cell_data.get('title', ''))
+                title_text = temp_doc.toPlainText()
+                temp_doc.setHtml(cell_data.get('content', ''))
+                content_text = temp_doc.toPlainText()
 
-                if search_text.lower() in plain_text.lower() if not case_sensitive else search_text in plain_text:
+                haystack = title_text + "\n" + content_text
+                needle = search_text
+
+                if not case_sensitive:
+                    haystack = haystack.lower()
+                    needle = needle.lower()
+
+                if needle in haystack:
                     self.search_matches.append((grid_index, i))
 
         if self.search_matches:
@@ -146,18 +174,11 @@ class MainWindow(QMainWindow):
         self.current_search_index = index
         grid_idx, cell_idx = self.search_matches[index]
 
-        # Switch grid if necessary
         if self.grid_switcher.currentIndex() != grid_idx:
             self.is_navigating_search = True
             self.grid_switcher.setCurrentIndex(grid_idx)
-            # The search will be re-run by switch_grid, but we need to highlight
-            # We need to wait for the switch to complete. This is tricky.
-            # A simpler way is to just set the highlights after the switch.
-            # The switch_grid will call perform_search, which will find the matches again.
-            # Then we can navigate.
             self.is_navigating_search = False
 
-        # Highlight and scroll
         row = cell_idx // NUM_COLS
         col = cell_idx % NUM_COLS
         model_index = self.grid_model.index(row, col)
@@ -181,7 +202,6 @@ class MainWindow(QMainWindow):
         self.go_to_match(new_index)
 
     def rename_grid(self):
-        # ... (rest of the file is the same)
         current_index = self.grid_switcher.currentIndex()
         if current_index < 0: return
         current_name = self.grid_names[current_index]
@@ -235,11 +255,28 @@ class MainWindow(QMainWindow):
         if not index.isValid(): return
         context_menu = QMenu(self)
         color_menu = context_menu.addMenu("Change Color")
-        colors = ["White", "Red", "Green", "Blue", "Yellow"]
-        for color_name in colors:
-            action = color_menu.addAction(color_name)
-            handler = partial(self.handle_color_change, index, color_name.lower())
+
+        colors = {
+            "Default (White)": "white",
+            "Pastel Red": "#ffb3ba",
+            "Pastel Green": "#baffc9",
+            "Pastel Blue": "#bae1ff",
+            "Pastel Yellow": "#ffffba",
+            "Pastel Purple": "#e0baff",
+            "Pastel Orange": "#ffdfba"
+        }
+
+        for name, hex_code in colors.items():
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(QColor(hex_code))
+            icon = QIcon(pixmap)
+            action = color_menu.addAction(icon, name)
+            handler = partial(self.handle_color_change, index, hex_code)
             action.triggered.connect(handler)
+
+        context_menu.addSeparator()
+        copy_action = context_menu.addAction("Copy Note Content")
+        copy_action.triggered.connect(lambda: self.copy_note_content(index))
 
         context_menu.addSeparator()
         group_action = context_menu.addAction("Group by Color")
@@ -248,6 +285,20 @@ class MainWindow(QMainWindow):
         reset_action.triggered.connect(self.reset_grouping)
 
         context_menu.exec(self.table_view.viewport().mapToGlobal(pos))
+
+    def copy_note_content(self, index):
+        if not index.isValid():
+            return
+        cell_index = index.row() * NUM_COLS + index.column()
+        cell_data = self.grid_model._data[cell_index]
+        content = cell_data.get('content', '')
+
+        # To get plain text from HTML for the clipboard
+        temp_doc = QTextDocument()
+        temp_doc.setHtml(content)
+        plain_text = temp_doc.toPlainText()
+
+        QApplication.clipboard().setText(plain_text)
 
     def handle_color_change(self, index, color, checked=False):
         """Wrapper to handle the signal from the color menu actions."""
@@ -285,16 +336,20 @@ class MainWindow(QMainWindow):
                         data = json.load(f)
                         migrated_data = []
                         for pos, item in enumerate(data):
-                            if isinstance(item, dict) and 'text' in item and 'color' in item:
-                                if 'position' not in item:
-                                    item['position'] = pos
-                                migrated_data.append(item)
-                            else:
-                                migrated_data.append({'text': str(item), 'color': 'white', 'position': pos})
+                            if not isinstance(item, dict):
+                                item = {'text': str(item)}
+                            if 'position' not in item:
+                                item['position'] = pos
+                            if 'content' not in item:
+                                item['content'] = item.get('text', '')
+                                item['title'] = f"Cell {pos + 1}"
+                            if 'text' in item:
+                                del item['text']
+                            migrated_data.append(item)
 
                         while len(migrated_data) < (NUM_ROWS * NUM_COLS):
                             pos = len(migrated_data)
-                            migrated_data.append({'text': '', 'color': 'white', 'position': pos})
+                            migrated_data.append(self.get_default_cell_data(pos))
 
                         self.grid_data[grid_name] = migrated_data[:(NUM_ROWS * NUM_COLS)]
                     except (json.JSONDecodeError, TypeError):
@@ -304,8 +359,11 @@ class MainWindow(QMainWindow):
         self.current_grid_id = self.grid_names[0]
         self.save_all_grids()
 
+    def get_default_cell_data(self, position):
+        return {'title': f"Cell {position + 1}", 'content': '', 'color': 'white', 'position': position}
+
     def get_default_data(self):
-        return [{'text': f"Cell {j + 1}", 'color': 'white', 'position': j} for j in range(NUM_ROWS * NUM_COLS)]
+        return [self.get_default_cell_data(j) for j in range(NUM_ROWS * NUM_COLS)]
 
     def save_all_grids(self):
         for i, grid_name in enumerate(self.grid_names):

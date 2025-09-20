@@ -21,13 +21,15 @@ class GridModel(QAbstractTableModel):
         cell_index = row * NUM_COLS + col
         if cell_index >= len(self._data): return None
 
+        cell_data = self._data[cell_index]
+
         if role == Qt.ItemDataRole.BackgroundRole:
             if cell_index in self.highlighted_cells:
                 return SEARCH_HIGHLIGHT_COLOR
-            return QColor(self._data[cell_index].get('color', 'white'))
+            return QColor(cell_data.get('color', 'white'))
 
-        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
-            return self._data[cell_index].get('text', '')
+        if role == Qt.ItemDataRole.DisplayRole:
+            return cell_data.get('title', '')
 
         if role == Qt.ItemDataRole.ForegroundRole:
             if cell_index in self.highlighted_cells:
@@ -36,15 +38,18 @@ class GridModel(QAbstractTableModel):
         return None
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
-        if not index.isValid(): return False
+        # This is now handled by set_cell_data
+        return False
+
+    def set_cell_data(self, index, title, content):
+        if not index.isValid(): return
         row, col = index.row(), index.column()
         cell_index = row * NUM_COLS + col
-        if cell_index >= len(self._data): return False
-        if role == Qt.ItemDataRole.EditRole:
-            self._data[cell_index]['text'] = value
-            self.dataChanged.emit(index, index, [role])
-            return True
-        return False
+        if cell_index >= len(self._data): return
+
+        self._data[cell_index]['title'] = title
+        self._data[cell_index]['content'] = content
+        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole])
 
     def set_color(self, index, color):
         if not index.isValid(): return
@@ -56,7 +61,7 @@ class GridModel(QAbstractTableModel):
 
     def flags(self, index):
         if not index.isValid(): return Qt.ItemFlag.NoItemFlags
-        return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def load_data(self, new_data):
         self.beginResetModel()
