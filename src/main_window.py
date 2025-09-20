@@ -1,13 +1,14 @@
 import sys
 import os
 import json
+from functools import partial
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTableView,
                              QHeaderView, QComboBox, QVBoxLayout, QMenu,
                              QTextEdit, QToolBar, QPushButton, QHBoxLayout,
-                             QInputDialog, QLineEdit, QCheckBox)
+                             QInputDialog, QLineEdit, QCheckBox, QLabel)
 from PyQt6.QtGui import QTextDocument
 
 from .constants import *
@@ -18,6 +19,10 @@ from .grid_model import GridModel
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.search_matches = []
+        self.current_search_index = -1
+        self.is_navigating_search = False
+
         self.setWindowTitle("GridNote Pro")
         self.setGeometry(100, 100, 1200, 800)
         self.create_menu()
@@ -74,37 +79,109 @@ class MainWindow(QMainWindow):
 
         search_toolbar = QToolBar("Search")
         self.addToolBar(search_toolbar)
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
         self.search_input.textChanged.connect(self.perform_search)
         search_toolbar.addWidget(self.search_input)
+
+        prev_button = QPushButton("Previous")
+        prev_button.clicked.connect(self.go_to_previous_match)
+        search_toolbar.addWidget(prev_button)
+
+        next_button = QPushButton("Next")
+        next_button.clicked.connect(self.go_to_next_match)
+        search_toolbar.addWidget(next_button)
+
+        self.search_status_label = QLabel("0 / 0")
+        search_toolbar.addWidget(self.search_status_label)
+
+        self.search_case_sensitive_checkbox = QCheckBox("Case Sensitive")
+        self.search_case_sensitive_checkbox.stateChanged.connect(self.perform_search)
+        search_toolbar.addWidget(self.search_case_sensitive_checkbox)
+
         self.search_all_grids_checkbox = QCheckBox("Search all grids")
         self.search_all_grids_checkbox.stateChanged.connect(self.perform_search)
         search_toolbar.addWidget(self.search_all_grids_checkbox)
 
     def perform_search(self):
-        search_text = self.search_input.text().lower()
-        search_all = self.search_all_grids_checkbox.isChecked()
-
-        if not search_text:
-            self.grid_model.set_highlights(set())
+        if self.is_navigating_search:
             return
 
-        found_in_current_grid = set()
+        search_text = self.search_input.text()
+        case_sensitive = self.search_case_sensitive_checkbox.isChecked()
+        search_all = self.search_all_grids_checkbox.isChecked()
+
+        self.search_matches = []
+        self.current_search_index = -1
+        self.grid_model.set_highlights(set())
+
+        if not search_text:
+            self.search_status_label.setText("0 / 0")
+            return
+
         grids_to_search = self.grid_names if search_all else [self.current_grid_id]
         temp_doc = QTextDocument()
 
+        search_flags = Qt.CaseSensitivity.CaseSensitive if case_sensitive else Qt.CaseSensitivity.CaseInsensitive
+
         for grid_name in grids_to_search:
+            grid_index = self.grid_names.index(grid_name)
             for i, cell_data in enumerate(self.grid_data[grid_name]):
                 temp_doc.setHtml(cell_data.get('text', ''))
-                plain_text = temp_doc.toPlainText().lower()
-                if search_text in plain_text:
-                    if grid_name == self.current_grid_id:
-                        found_in_current_grid.add(i)
+                plain_text = temp_doc.toPlainText()
 
-        self.grid_model.set_highlights(found_in_current_grid)
+                if search_text.lower() in plain_text.lower() if not case_sensitive else search_text in plain_text:
+                    self.search_matches.append((grid_index, i))
+
+        if self.search_matches:
+            self.go_to_match(0)
+        else:
+            self.search_status_label.setText("0 / 0")
+
+    def go_to_match(self, index):
+        if not self.search_matches:
+            return
+
+        self.current_search_index = index
+        grid_idx, cell_idx = self.search_matches[index]
+
+        # Switch grid if necessary
+        if self.grid_switcher.currentIndex() != grid_idx:
+            self.is_navigating_search = True
+            self.grid_switcher.setCurrentIndex(grid_idx)
+            # The search will be re-run by switch_grid, but we need to highlight
+            # We need to wait for the switch to complete. This is tricky.
+            # A simpler way is to just set the highlights after the switch.
+            # The switch_grid will call perform_search, which will find the matches again.
+            # Then we can navigate.
+            self.is_navigating_search = False
+
+        # Highlight and scroll
+        row = cell_idx // NUM_COLS
+        col = cell_idx % NUM_COLS
+        model_index = self.grid_model.index(row, col)
+
+        self.table_view.scrollTo(model_index, QTableView.ScrollHint.EnsureVisible)
+        self.table_view.setCurrentIndex(model_index)
+        self.grid_model.set_highlights({cell_idx})
+
+        self.search_status_label.setText(f"{self.current_search_index + 1} / {len(self.search_matches)}")
+
+    def go_to_previous_match(self):
+        if not self.search_matches:
+            return
+        new_index = (self.current_search_index - 1 + len(self.search_matches)) % len(self.search_matches)
+        self.go_to_match(new_index)
+
+    def go_to_next_match(self):
+        if not self.search_matches:
+            return
+        new_index = (self.current_search_index + 1) % len(self.search_matches)
+        self.go_to_match(new_index)
 
     def rename_grid(self):
+        # ... (rest of the file is the same)
         current_index = self.grid_switcher.currentIndex()
         if current_index < 0: return
         current_name = self.grid_names[current_index]
@@ -161,7 +238,8 @@ class MainWindow(QMainWindow):
         colors = ["White", "Red", "Green", "Blue", "Yellow"]
         for color_name in colors:
             action = color_menu.addAction(color_name)
-            action.triggered.connect(lambda checked, i=index, c=color_name.lower(): self.change_cell_color(i, c))
+            handler = partial(self.handle_color_change, index, color_name.lower())
+            action.triggered.connect(handler)
 
         context_menu.addSeparator()
         group_action = context_menu.addAction("Group by Color")
@@ -170,6 +248,10 @@ class MainWindow(QMainWindow):
         reset_action.triggered.connect(self.reset_grouping)
 
         context_menu.exec(self.table_view.viewport().mapToGlobal(pos))
+
+    def handle_color_change(self, index, color, checked=False):
+        """Wrapper to handle the signal from the color menu actions."""
+        self.change_cell_color(index, color)
 
     def group_by_color(self):
         current_data = self.grid_data[self.current_grid_id]
@@ -238,7 +320,8 @@ class MainWindow(QMainWindow):
         with open(file_path, 'w') as f: json.dump(self.grid_data[self.current_grid_id], f, indent=4)
 
     def switch_grid(self, index):
-        if index < 0: return
+        if index < 0 or self.is_navigating_search:
+            return
         self.current_grid_id = self.grid_names[index]
         data = self.grid_data[self.current_grid_id]
         self.grid_model.load_data(data)
