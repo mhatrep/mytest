@@ -24,6 +24,7 @@ class MainWindow(QMainWindow):
         self.search_matches = []
         self.current_search_index = -1
         self.is_navigating_search = False
+        self.show_matches_only = False
 
         self.setWindowTitle("GridNote Pro")
         self.setGeometry(100, 100, 1200, 800)
@@ -48,8 +49,11 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(grid_control_layout)
 
         self.table_view = HoverTableView()
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table_view.setWordWrap(True)
+        self.table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.table_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         # The delegate is now only for painting, not editing
         self.table_view.setItemDelegate(TextEditDelegate(self.table_view))
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -77,6 +81,7 @@ class MainWindow(QMainWindow):
             new_title, new_content = dialog.get_data()
             self.grid_model.set_cell_data(index, new_title, new_content)
             self.save_current_grid_data()
+            self.table_view.resizeRowToContents(index.row())
 
     def create_menu(self):
         menu_bar = self.menuBar()
@@ -137,6 +142,7 @@ class MainWindow(QMainWindow):
 
         if not search_text:
             self.search_status_label.setText("0 / 0")
+            self.set_show_matches_only(False)
             return
 
         grids_to_search = self.grid_names if search_all else [self.current_grid_id]
@@ -161,10 +167,13 @@ class MainWindow(QMainWindow):
                 if needle in haystack:
                     self.search_matches.append((grid_index, i))
 
+        self.update_highlights_for_current_grid()
+
         if self.search_matches:
             self.go_to_match(0)
         else:
             self.search_status_label.setText("0 / 0")
+            self.set_show_matches_only(False)
 
     def go_to_match(self, index):
         if not self.search_matches:
@@ -184,7 +193,7 @@ class MainWindow(QMainWindow):
 
         self.table_view.scrollTo(model_index, QTableView.ScrollHint.EnsureVisible)
         self.table_view.setCurrentIndex(model_index)
-        self.grid_model.set_highlights({cell_idx})
+        self.update_highlights_for_current_grid()
 
         self.search_status_label.setText(f"{self.current_search_index + 1} / {len(self.search_matches)}")
 
@@ -287,6 +296,13 @@ class MainWindow(QMainWindow):
         reset_action = context_menu.addAction("Reset Grouping")
         reset_action.triggered.connect(self.reset_grouping)
 
+        context_menu.addSeparator()
+        show_matches_action = context_menu.addAction("Show Matches Only")
+        show_matches_action.setCheckable(True)
+        show_matches_action.setChecked(self.show_matches_only)
+        show_matches_action.setEnabled(bool(self.search_input.text()))
+        show_matches_action.triggered.connect(self.toggle_show_matches_only)
+
         context_menu.exec(self.table_view.viewport().mapToGlobal(pos))
 
     def copy_note_content(self, index):
@@ -312,12 +328,14 @@ class MainWindow(QMainWindow):
         current_data.sort(key=lambda item: str(item.get('color', '')))
         self.grid_model.load_data(current_data)
         self.save_current_grid_data()
+        self.adjust_table_size()
 
     def reset_grouping(self):
         current_data = self.grid_data[self.current_grid_id]
         current_data.sort(key=lambda item: item.get('position', 0))
         self.grid_model.load_data(current_data)
         self.save_current_grid_data()
+        self.adjust_table_size()
 
     def change_cell_color(self, index, color):
         selected_indexes = self.table_view.selectionModel().selectedIndexes()
@@ -381,17 +399,52 @@ class MainWindow(QMainWindow):
         with open(file_path, 'w') as f: json.dump(self.grid_data[self.current_grid_id], f, indent=4)
 
     def switch_grid(self, index):
-        if index < 0 or self.is_navigating_search:
+        if index < 0:
             return
         self.current_grid_id = self.grid_names[index]
         data = self.grid_data[self.current_grid_id]
         self.grid_model.load_data(data)
-        self.perform_search()
+        if not self.is_navigating_search:
+            self.perform_search()
+        else:
+            self.update_highlights_for_current_grid()
+        self.adjust_table_size()
         print(f"Switched to {self.current_grid_id}")
 
     def on_data_changed(self, topleft, bottomright, roles):
         self.save_current_grid_data()
+        if roles == [Qt.ItemDataRole.DisplayRole]:
+            for row in range(topleft.row(), bottomright.row() + 1):
+                self.table_view.resizeRowToContents(row)
 
     def closeEvent(self, event):
         self.save_current_grid_data()
         super().closeEvent(event)
+
+    def toggle_show_matches_only(self, checked):
+        self.set_show_matches_only(checked)
+
+    def set_show_matches_only(self, checked):
+        checked = bool(checked and self.grid_model.highlighted_cells)
+        if self.show_matches_only == checked:
+            if not checked and self.grid_model.show_matches_only:
+                self.grid_model.set_show_matches_only(False)
+            elif checked:
+                self.grid_model.set_show_matches_only(True)
+            return
+        self.show_matches_only = checked
+        self.update_highlights_for_current_grid()
+
+    def update_highlights_for_current_grid(self):
+        current_grid_idx = self.grid_switcher.currentIndex()
+        if current_grid_idx < 0:
+            highlights = set()
+        else:
+            highlights = {cell_idx for grid_idx, cell_idx in self.search_matches if grid_idx == current_grid_idx}
+        self.grid_model.set_highlights(highlights)
+        if self.show_matches_only and not highlights:
+            self.show_matches_only = False
+        self.grid_model.set_show_matches_only(self.show_matches_only and bool(highlights))
+
+    def adjust_table_size(self):
+        self.table_view.resizeRowsToContents()

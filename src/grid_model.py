@@ -8,6 +8,7 @@ class GridModel(QAbstractTableModel):
         super().__init__(parent)
         self._data = data
         self.highlighted_cells = set()
+        self.show_matches_only = False
 
     def rowCount(self, parent=QModelIndex()):
         return NUM_ROWS
@@ -29,6 +30,8 @@ class GridModel(QAbstractTableModel):
             return QColor(cell_data.get('color', 'white'))
 
         if role == Qt.ItemDataRole.DisplayRole:
+            if self.show_matches_only and cell_index not in self.highlighted_cells:
+                return ""
             return cell_data.get('title', '')
 
         if role == Qt.ItemDataRole.ForegroundRole:
@@ -61,6 +64,9 @@ class GridModel(QAbstractTableModel):
 
     def flags(self, index):
         if not index.isValid(): return Qt.ItemFlag.NoItemFlags
+        cell_index = index.row() * NUM_COLS + index.column()
+        if self.show_matches_only and cell_index not in self.highlighted_cells:
+            return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def load_data(self, new_data):
@@ -72,4 +78,29 @@ class GridModel(QAbstractTableModel):
         self.highlighted_cells = indices
         top_left = self.index(0, 0)
         bottom_right = self.index(NUM_ROWS - 1, NUM_COLS - 1)
-        self.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.BackgroundRole, Qt.ItemDataRole.ForegroundRole])
+        roles = [
+            Qt.ItemDataRole.BackgroundRole,
+            Qt.ItemDataRole.ForegroundRole,
+            Qt.ItemDataRole.DisplayRole,
+        ]
+        self.dataChanged.emit(top_left, bottom_right, roles)
+
+    def set_show_matches_only(self, value):
+        if self.show_matches_only == value:
+            return
+        self.show_matches_only = value
+        top_left = self.index(0, 0)
+        bottom_right = self.index(NUM_ROWS - 1, NUM_COLS - 1)
+        roles = [
+            Qt.ItemDataRole.DisplayRole,
+            Qt.ItemDataRole.BackgroundRole,
+            Qt.ItemDataRole.ForegroundRole,
+        ]
+        self.dataChanged.emit(top_left, bottom_right, roles)
+
+    def is_cell_highlighted(self, index):
+        if isinstance(index, QModelIndex):
+            cell_index = index.row() * NUM_COLS + index.column()
+        else:
+            cell_index = index
+        return cell_index in self.highlighted_cells
