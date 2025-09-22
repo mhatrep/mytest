@@ -70,20 +70,18 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv);;All Files (*)")
         if file_path:
             try:
-                delimiter, ok = QInputDialog.getText(self, 'Delimiter', 'Enter delimiter:', text=',')
-                if ok:
-                    self.file_path = file_path
-                    self.delimiter = delimiter
-                    self.df = pd.read_csv(self.file_path, delimiter=self.delimiter)
-                    model = PandasModel(self.df)
+                self.file_path = file_path
+                self.delimiter = ","
+                self.df = pd.read_csv(self.file_path, delimiter=self.delimiter)
+                model = PandasModel(self.df)
 
-                    self.proxy_model = QSortFilterProxyModel()
-                    self.proxy_model.setSourceModel(model)
-                    self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-                    self.proxy_model.setFilterKeyColumn(-1)  # Filter on all columns
+                self.proxy_model = QSortFilterProxyModel()
+                self.proxy_model.setSourceModel(model)
+                self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                self.proxy_model.setFilterKeyColumn(-1)  # Filter on all columns
 
-                    self.table_view.setModel(self.proxy_model)
-                    self.statusBar().showMessage(f"Loaded {self.file_path}", 5000)
+                self.table_view.setModel(self.proxy_model)
+                self.statusBar().showMessage(f"Loaded {self.file_path}", 5000)
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading file: {e}", 5000)
 
@@ -96,7 +94,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No data loaded to profile.", 5000)
             return
 
-        formats = ("txt", "json")
+        formats = ("txt", "json", "csv")
         output_format, ok = QInputDialog.getItem(self, "Output Format",
                                                  "Select output format:", formats, 0, False)
         if not ok:
@@ -107,6 +105,8 @@ class MainWindow(QMainWindow):
             command = ["csvstat", "--delimiter", self.delimiter, self.file_path]
             if output_format == "json":
                 command.insert(1, "--json")
+            elif output_format == "csv":
+                command.insert(1, "--csv")
 
             result = subprocess.run(command, capture_output=True, text=True, check=True)
             report_content = result.stdout
