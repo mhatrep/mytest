@@ -2,6 +2,7 @@ import sys
 import pandas as pd
 import webbrowser
 import tempfile
+import subprocess
 from PyQt6.QtCore import QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QInputDialog, QLineEdit,
@@ -62,6 +63,8 @@ class MainWindow(QMainWindow):
 
         self.df = None
         self.proxy_model = None
+        self.file_path = None
+        self.delimiter = None
 
     def open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv);;All Files (*)")
@@ -69,7 +72,9 @@ class MainWindow(QMainWindow):
             try:
                 delimiter, ok = QInputDialog.getText(self, 'Delimiter', 'Enter delimiter:', text=',')
                 if ok:
-                    self.df = pd.read_csv(file_path, delimiter=delimiter)
+                    self.file_path = file_path
+                    self.delimiter = delimiter
+                    self.df = pd.read_csv(self.file_path, delimiter=self.delimiter)
                     model = PandasModel(self.df)
 
                     self.proxy_model = QSortFilterProxyModel()
@@ -78,7 +83,7 @@ class MainWindow(QMainWindow):
                     self.proxy_model.setFilterKeyColumn(-1)  # Filter on all columns
 
                     self.table_view.setModel(self.proxy_model)
-                    self.statusBar().showMessage(f"Loaded {file_path}", 5000)
+                    self.statusBar().showMessage(f"Loaded {self.file_path}", 5000)
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading file: {e}", 5000)
 
@@ -87,22 +92,36 @@ class MainWindow(QMainWindow):
             self.proxy_model.setFilterRegularExpression(text)
 
     def profile_data(self):
-        if self.df is not None:
-            self.statusBar().showMessage("Profiling data...", 5000)
-            try:
-                # Generate a description of the data
-                description = self.df.describe(include='all').to_html()
-
-                # Save to a temporary HTML file
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-                    tmp_file.write(description.encode('utf-8'))
-                    webbrowser.open(f"file://{tmp_file.name}")
-
-                self.statusBar().showMessage("Profiling report generated and opened in browser.", 5000)
-            except Exception as e:
-                self.statusBar().showMessage(f"Error profiling data: {e}", 5000)
-        else:
+        if self.file_path is None:
             self.statusBar().showMessage("No data loaded to profile.", 5000)
+            return
+
+        formats = ("txt", "json")
+        output_format, ok = QInputDialog.getItem(self, "Output Format",
+                                                 "Select output format:", formats, 0, False)
+        if not ok:
+            return
+
+        self.statusBar().showMessage(f"Generating {output_format} report...", 5000)
+        try:
+            command = ["csvstat", "--delimiter", self.delimiter, self.file_path]
+            if output_format == "json":
+                command.insert(1, "--json")
+
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            report_content = result.stdout
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_format}", mode="w") as tmp_file:
+                tmp_file.write(report_content)
+                webbrowser.open(f"file://{tmp_file.name}")
+
+            self.statusBar().showMessage("Profiling report generated and opened.", 5000)
+        except FileNotFoundError:
+            self.statusBar().showMessage("Error: csvkit not found. Please ensure it is installed and in your PATH.", 10000)
+        except subprocess.CalledProcessError as e:
+            self.statusBar().showMessage(f"Error running csvstat: {e.stderr}", 10000)
+        except Exception as e:
+            self.statusBar().showMessage(f"An unexpected error occurred: {e}", 10000)
 
     def closeEvent(self, event):
         QApplication.quit()

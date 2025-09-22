@@ -26,8 +26,9 @@ This is a Python/Qt6 application for profiling CSV data.
 
 3.  **Profile data:**
     *   Click on the "Profile Data" button in the toolbar or go to "File -> Profile Data".
-    *   This will generate an HTML report with a summary of the data using `pandas.DataFrame.describe()`.
-    *   The report will be opened automatically in your default web browser.
+    *   You will be prompted to select an output format (`.txt` or `.json`).
+    *   This will generate a report using `csvkit csvstat`.
+    *   The report will be saved to a temporary file and opened automatically.
 
 ### Sample Data
 
