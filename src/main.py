@@ -2,7 +2,6 @@ import sys
 import pandas as pd
 import webbrowser
 import tempfile
-from ydata_profiling import ProfileReport
 from PyQt6.QtCore import QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QInputDialog, QLineEdit,
@@ -90,14 +89,18 @@ class MainWindow(QMainWindow):
     def profile_data(self):
         if self.df is not None:
             self.statusBar().showMessage("Profiling data...", 5000)
-            profile = ProfileReport(self.df, title="Pandas Profiling Report")
+            try:
+                # Generate a description of the data
+                description = self.df.describe(include='all').to_html()
 
-            # Save to a temporary HTML file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-                profile.to_file(tmp_file.name)
-                webbrowser.open(f"file://{tmp_file.name}")
+                # Save to a temporary HTML file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+                    tmp_file.write(description.encode('utf-8'))
+                    webbrowser.open(f"file://{tmp_file.name}")
 
-            self.statusBar().showMessage("Profiling report generated and opened in browser.", 5000)
+                self.statusBar().showMessage("Profiling report generated and opened in browser.", 5000)
+            except Exception as e:
+                self.statusBar().showMessage(f"Error profiling data: {e}", 5000)
         else:
             self.statusBar().showMessage("No data loaded to profile.", 5000)
 
