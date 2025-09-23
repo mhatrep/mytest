@@ -16,12 +16,13 @@ This is a Python/Qt6 application for profiling CSV data.
 
 ### How to Use
 
-1.  **Open a CSV file:**
+1.  **Open one or more CSV files:**
     *   Click on the "Open" button in the toolbar or go to "File -> Open".
-    *   Select a CSV file from your local machine. The application assumes the file is comma-delimited and UTF-8 encoded.
+    *   You can select multiple CSV files from your local machine.
+    *   Each file will be opened in a new tab. The application assumes files are comma-delimited and UTF-8 encoded.
 
 2.  **Filter data:**
-    *   Type in the search bar at the top to filter the data in the table. The filtering is case-insensitive and applies to all columns.
+    *   Type in the search bar at the top to filter the data in the currently active tab.
 
 3.  **Generate a Report:**
     *   Click on the "Generate Report" button or go to "Tools -> Generate Report".

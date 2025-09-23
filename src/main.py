@@ -9,7 +9,7 @@ from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
-                             QComboBox, QPushButton, QFormLayout, QCheckBox)
+                             QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
@@ -76,19 +76,24 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("CSV Profiler")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 900, 700)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # Main layout container
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        self.layout = QVBoxLayout(main_widget)
 
+        # Filter input
         self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("Filter...")
+        self.filter_input.setPlaceholderText("Filter data in current tab...")
         self.filter_input.textChanged.connect(self.filter_data)
-        layout.addWidget(self.filter_input)
+        self.layout.addWidget(self.filter_input)
 
-        self.table_view = QTableView()
-        layout.addWidget(self.table_view)
+        # Tab widget for multiple files
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        self.layout.addWidget(self.tab_widget)
 
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
@@ -117,13 +122,15 @@ class MainWindow(QMainWindow):
         # Status Bar
         self.setStatusBar(QStatusBar(self))
 
-        self.df = None
-        self.proxy_model = None
-        self.file_path = None
-        self.delimiter = None
+        self.tabs_data = [] # To store data for each tab
 
         self.thread = None
         self.worker = None
+
+    def close_tab(self, index):
+        self.tab_widget.removeTab(index)
+        if index < len(self.tabs_data):
+            del self.tabs_data[index]
 
     def show_error_message(self, text):
         msg_box = QMessageBox(self)
@@ -133,30 +140,50 @@ class MainWindow(QMainWindow):
         msg_box.exec()
 
     def open_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv);;All Files (*)")
-        if file_path:
+        file_paths, _ = QFileDialog.getOpenFileNames(self, "Open CSV(s)", "", "CSV Files (*.csv);;All Files (*)")
+        if not file_paths:
+            return
+
+        for file_path in file_paths:
             try:
-                self.file_path = file_path
-                self.delimiter = ","
-                self.df = pd.read_csv(self.file_path, delimiter=self.delimiter, encoding='utf-8')
-                model = PandasModel(self.df)
+                df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
 
-                self.proxy_model = QSortFilterProxyModel()
-                self.proxy_model.setSourceModel(model)
-                self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-                self.proxy_model.setFilterKeyColumn(-1)  # Filter on all columns
+                # Create a new tab
+                table_view = QTableView()
+                proxy_model = QSortFilterProxyModel()
+                pandas_model = PandasModel(df)
+                proxy_model.setSourceModel(pandas_model)
+                proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                proxy_model.setFilterKeyColumn(-1)
+                table_view.setModel(proxy_model)
 
-                self.table_view.setModel(self.proxy_model)
-                self.statusBar().showMessage(f"Loaded {self.file_path}", 5000)
+                # Store data for this tab
+                tab_data = {
+                    'df': df,
+                    'proxy_model': proxy_model,
+                    'file_path': file_path
+                }
+                self.tabs_data.append(tab_data)
+
+                tab_name = os.path.basename(file_path)
+                index = self.tab_widget.addTab(table_view, tab_name)
+                self.tab_widget.setCurrentIndex(index)
+
             except Exception as e:
-                self.show_error_message(f"Error loading file: {e}")
+                self.show_error_message(f"Error loading file {file_path}:\n{e}")
+                continue # Continue to next file
 
     def filter_data(self, text):
-        if self.proxy_model:
-            self.proxy_model.setFilterRegularExpression(text)
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0 or current_index >= len(self.tabs_data):
+            return
+
+        proxy_model = self.tabs_data[current_index]['proxy_model']
+        proxy_model.setFilterRegularExpression(text)
 
     def show_report_dialog(self):
-        if self.df is None:
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0:
             self.show_error_message("Please open a file first.")
             return
 
@@ -188,21 +215,24 @@ class MainWindow(QMainWindow):
 
     def _generate_report_task(self):
         profiler_name = self.options['profiler']
+        current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
+        df = current_tab_data['df']
+        file_path = current_tab_data['file_path']
 
         if profiler_name == "Data Modeling Report":
-            command = ["csvstat", "--delimiter", self.delimiter, "--json", self.file_path]
+            command = ["csvstat", "--delimiter", ",", "--json", file_path]
             result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
-            report_content = generate_recommendations(result.stdout, self.file_path)
+            report_content = generate_recommendations(result.stdout, file_path)
             return report_content, ".txt"
         elif profiler_name == "csvkit (raw stats)":
             # Returns a dictionary of reports
-            return profilers.run_csvkit(self.file_path, self.delimiter), None
+            return profilers.run_csvkit(file_path, ","), None
         elif profiler_name == "YData-Profiling":
-            return profilers.run_ydata_profiling(self.df), ".html"
+            return profilers.run_ydata_profiling(df), ".html"
         elif profiler_name == "Sweetviz":
-            return profilers.run_sweetviz(self.df), ".html"
+            return profilers.run_sweetviz(df), ".html"
         elif profiler_name == "Dataprep.EDA":
-            return profilers.run_dataprep(self.df), ".html"
+            return profilers.run_dataprep(df), ".html"
 
         raise NotImplementedError(f"Profiler '{profiler_name}' is not implemented yet.")
 
@@ -212,6 +242,7 @@ class MainWindow(QMainWindow):
 
         report_content, file_ext = result
         self.save_report(report_content, file_ext, self.options['open_after_save'])
+        self.thread = None # Fix RuntimeError by nullifying the thread
 
     def save_report(self, content, extension, open_after_save):
         if isinstance(content, dict):
