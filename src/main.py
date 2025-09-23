@@ -6,9 +6,23 @@ import subprocess
 from PyQt6.QtCore import QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QInputDialog, QLineEdit,
-                             QVBoxLayout, QWidget)
+                             QVBoxLayout, QWidget, QDialog, QTextEdit)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
+from reporter import generate_recommendations
+
+
+class ReportDialog(QDialog):
+    def __init__(self, report_text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Data Modeling Report")
+        self.setGeometry(150, 150, 700, 500)
+        layout = QVBoxLayout(self)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setText(report_text)
+        text_edit.setFontFamily("Courier")
+        layout.addWidget(text_edit)
 
 
 class MainWindow(QMainWindow):
@@ -36,27 +50,35 @@ class MainWindow(QMainWindow):
         # Menu Bar
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
+        tools_menu = menu_bar.addMenu("&Tools")
 
         open_action = QAction("Open", self)
         open_action.setStatusTip("Open a CSV file")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
-        profile_action = QAction("Profile Data", self)
-        profile_action.setStatusTip("Generate a profile report of the data")
-        profile_action.triggered.connect(self.profile_data)
-        file_menu.addAction(profile_action)
-
         exit_action = QAction("Exit", self)
         exit_action.setStatusTip("Exit the application")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        profile_action = QAction("Profile Data (csvstat)", self)
+        profile_action.setStatusTip("Generate a basic profile report using csvstat")
+        profile_action.triggered.connect(self.profile_data)
+        tools_menu.addAction(profile_action)
+
+        recommend_action = QAction("Generate Modeling Report", self)
+        recommend_action.setStatusTip("Generate a data modeling recommendation report")
+        recommend_action.triggered.connect(self.generate_modeling_report)
+        tools_menu.addAction(recommend_action)
+
 
         # Toolbar
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
         toolbar.addAction(profile_action)
+        toolbar.addAction(recommend_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -116,6 +138,33 @@ class MainWindow(QMainWindow):
                 webbrowser.open(f"file://{tmp_file.name}")
 
             self.statusBar().showMessage("Profiling report generated and opened.", 5000)
+        except FileNotFoundError:
+            self.statusBar().showMessage("Error: csvkit not found. Please ensure it is installed and in your PATH.", 10000)
+        except subprocess.CalledProcessError as e:
+            self.statusBar().showMessage(f"Error running csvstat: {e.stderr}", 10000)
+        except Exception as e:
+            self.statusBar().showMessage(f"An unexpected error occurred: {e}", 10000)
+
+    def generate_modeling_report(self):
+        if self.file_path is None:
+            self.statusBar().showMessage("No data loaded to generate a report.", 5000)
+            return
+
+        self.statusBar().showMessage("Generating modeling report...", 10000)
+        try:
+            # Get stats as JSON
+            command = ["csvstat", "--delimiter", self.delimiter, "--json", self.file_path]
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            stats_json = result.stdout
+
+            # Generate recommendations
+            report_text = generate_recommendations(stats_json, self.file_path)
+
+            # Display in dialog
+            dialog = ReportDialog(report_text, self)
+            dialog.exec()
+            self.statusBar().showMessage("Modeling report generated successfully.", 5000)
+
         except FileNotFoundError:
             self.statusBar().showMessage("Error: csvkit not found. Please ensure it is installed and in your PATH.", 10000)
         except subprocess.CalledProcessError as e:
