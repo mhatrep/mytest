@@ -104,6 +104,30 @@ class GrainReportDialog(QDialog):
         self.table_view.resizeColumnsToContents()
         self.layout.addWidget(self.table_view)
 
+        self.copy_button = QPushButton("Copy to Clipboard")
+        self.copy_button.clicked.connect(self.copy_to_clipboard)
+        self.layout.addWidget(self.copy_button)
+
+    def copy_to_clipboard(self):
+        clipboard = QApplication.clipboard()
+        model = self.table_view.model()
+        if not model:
+            return
+
+        # Prepare header
+        header = [model.headerData(i, Qt.Orientation.Horizontal) for i in range(model.columnCount())]
+        clipboard_text = "\t".join(header) + "\n"
+
+        # Prepare data rows
+        for r in range(model.rowCount()):
+            row_data = [model.data(model.index(r, c)) for c in range(model.columnCount())]
+            clipboard_text += "\t".join(row_data) + "\n"
+
+        clipboard.setText(clipboard_text)
+        # Show feedback to the user, e.g., in a status bar if the dialog had one,
+        # or a simple pop-up, or just nothing for simplicity.
+        # For now, we'll just rely on the button press feedback.
+
 
 class UniqueValuesDialog(QDialog):
     def __init__(self, parent=None):
