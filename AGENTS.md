@@ -32,6 +32,12 @@ This is a Python/Qt6 application for profiling CSV data.
     *   **Note:** If you select "csvkit (raw stats)", the application will save three files (`.txt`, `.json`, and `.csv`) using the name you provide as a base. For all other profilers, it will save a single file.
     *   You can choose to have the file(s) opened automatically after saving.
 
+4.  **Export Unique Values:**
+    *   Click on the "Export Unique Values" button or go to "Tools -> Export Unique Values".
+    *   A dialog will appear allowing you to choose if the check should be case-sensitive.
+    *   You will then be prompted to select an output directory.
+    *   The application will create a sub-directory named after your file, and inside it, a separate `.txt` file for each column containing its unique values.
+
 ### Sample Data
 
 A sample CSV file named `sample_data.csv` is included in the root of the project. You can use this file to test the application.

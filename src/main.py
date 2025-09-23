@@ -14,6 +14,27 @@ from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
 import profilers
+import exporter
+
+
+class UniqueValuesDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Export Unique Values Options")
+        self.layout = QFormLayout(self)
+
+        self.case_sensitive_check = QCheckBox("Case-sensitive")
+        self.case_sensitive_check.setChecked(False)
+        self.layout.addRow("Option:", self.case_sensitive_check)
+
+        self.ok_button = QPushButton("Export")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
+
+    def get_options(self):
+        return {
+            "case_sensitive": self.case_sensitive_check.isChecked()
+        }
 
 
 class Worker(QObject):
@@ -114,10 +135,16 @@ class MainWindow(QMainWindow):
         self.report_action.triggered.connect(self.show_report_dialog)
         tools_menu.addAction(self.report_action)
 
+        export_unique_action = QAction("Export Unique Values", self)
+        export_unique_action.setStatusTip("Export unique values for each column to text files")
+        export_unique_action.triggered.connect(self.show_export_unique_dialog)
+        tools_menu.addAction(export_unique_action)
+
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
         toolbar.addAction(self.report_action)
+        toolbar.addAction(export_unique_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -290,6 +317,56 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error_message(f"Error saving files: {e}")
 
+
+    def show_export_unique_dialog(self):
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0:
+            self.show_error_message("Please open a file first.")
+            return
+
+        if self.thread is not None and self.thread.isRunning():
+            self.show_error_message("Another process is already running.")
+            return
+
+        dialog = UniqueValuesDialog(self)
+        if not dialog.exec():
+            return
+
+        options = dialog.get_options()
+
+        # Ask for output directory
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if not dir_path:
+            return
+
+        self.thread = QThread()
+        self.worker = Worker(self._export_unique_values_task, options, dir_path)
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_export_finished)
+        self.worker.error.connect(self.show_error_message)
+
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+
+        self.thread.start()
+        self.statusBar().showMessage("Exporting unique values...")
+
+    def _export_unique_values_task(self, options, dir_path):
+        current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
+        df = current_tab_data['df']
+        file_path = current_tab_data['file_path']
+
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        output_dir = os.path.join(dir_path, base_name)
+
+        return exporter.export_unique_values(df, output_dir, options['case_sensitive'])
+
+    def _on_export_finished(self, message):
+        self.statusBar().showMessage(message, 8000)
 
     def closeEvent(self, event):
         QApplication.quit()

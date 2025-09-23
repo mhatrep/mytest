@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QAbstractTableModel, Qt
+from PyQt6.QtGui import QFont
 
 
 class PandasModel(QAbstractTableModel):
@@ -24,4 +25,10 @@ class PandasModel(QAbstractTableModel):
                 return str(self._data.columns[section])
             if orientation == Qt.Orientation.Vertical:
                 return str(self._data.index[section])
+
+        if role == Qt.ItemDataRole.FontRole and orientation == Qt.Orientation.Horizontal:
+            font = QFont()
+            font.setBold(True)
+            return font
+
         return None
