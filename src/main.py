@@ -1,4 +1,5 @@
 import sys
+import os
 import pandas as pd
 import webbrowser
 import tempfile
@@ -169,15 +170,6 @@ class MainWindow(QMainWindow):
 
         self.options = dialog.get_options()
 
-        # Special handling for csvkit to get format before threading
-        if self.options['profiler'] == 'csvkit (raw stats)':
-            formats = ("txt", "json", "csv")
-            output_format, ok = QInputDialog.getItem(self, "CSVKit Output Format",
-                                                     "Select output format:", formats, 0, False)
-            if not ok:
-                return
-            self.options['csvkit_format'] = output_format
-
         self.thread = QThread()
         self.worker = Worker(self._generate_report_task)
         self.worker.moveToThread(self.thread)
@@ -203,9 +195,8 @@ class MainWindow(QMainWindow):
             report_content = generate_recommendations(result.stdout, self.file_path)
             return report_content, ".txt"
         elif profiler_name == "csvkit (raw stats)":
-            output_format = self.options['csvkit_format']
-            report_content = profilers.run_csvkit(self.file_path, self.delimiter, output_format)
-            return report_content, f".{output_format}"
+            # Returns a dictionary of reports
+            return profilers.run_csvkit(self.file_path, self.delimiter), None
         elif profiler_name == "YData-Profiling":
             return profilers.run_ydata_profiling(self.df), ".html"
         elif profiler_name == "Sweetviz":
@@ -220,13 +211,15 @@ class MainWindow(QMainWindow):
         self.report_action.setEnabled(True)
 
         report_content, file_ext = result
-        if report_content is None:
-            # This handles the placeholder for csvkit
+        self.save_report(report_content, file_ext, self.options['open_after_save'])
+
+    def save_report(self, content, extension, open_after_save):
+        if isinstance(content, dict):
+            # Handle multi-file save for csvkit
+            self.save_multifile_report(content, open_after_save)
             return
 
-        self.save_report_file(report_content, file_ext, self.options['open_after_save'])
-
-    def save_report_file(self, content, extension, open_after_save):
+        # Handle single file save
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Report", f"report{extension}", f"Report Files (*{extension})")
         if not file_path:
             return
@@ -239,6 +232,32 @@ class MainWindow(QMainWindow):
                 webbrowser.open(f"file://{file_path}")
         except Exception as e:
             self.show_error_message(f"Error saving file: {e}")
+
+    def save_multifile_report(self, reports: dict, open_after_save):
+        # Ask for a base filename, e.g., "my_report"
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Reports", "report", "All Files (*)")
+        if not file_path:
+            return
+
+        # Strip extension if user provides one
+        base_path, _ = os.path.splitext(file_path)
+
+        try:
+            saved_paths = []
+            for ext, content in reports.items():
+                path = f"{base_path}.{ext}"
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                saved_paths.append(path)
+
+            self.statusBar().showMessage(f"Reports saved: {', '.join(p for p in saved_paths)}", 8000)
+
+            if open_after_save and saved_paths:
+                # Open the first created file
+                webbrowser.open(f"file://{saved_paths[0]}")
+
+        except Exception as e:
+            self.show_error_message(f"Error saving files: {e}")
 
 
     def closeEvent(self, event):

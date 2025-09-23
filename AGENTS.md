@@ -28,7 +28,8 @@ This is a Python/Qt6 application for profiling CSV data.
     *   A dialog will appear. Choose the type of profiler you want to use from the dropdown menu.
     *   Click "Generate".
     *   A "Save As..." dialog will appear. Choose a location and filename for your report.
-    *   You can choose to have the file opened automatically after it is saved.
+    *   **Note:** If you select "csvkit (raw stats)", the application will save three files (`.txt`, `.json`, and `.csv`) using the name you provide as a base. For all other profilers, it will save a single file.
+    *   You can choose to have the file(s) opened automatically after saving.
 
 ### Sample Data
 
