@@ -6,7 +6,7 @@ import subprocess
 from PyQt6.QtCore import QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QInputDialog, QLineEdit,
-                             QVBoxLayout, QWidget, QDialog, QTextEdit)
+                             QVBoxLayout, QWidget, QDialog, QTextEdit, QMessageBox)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
@@ -88,6 +88,13 @@ class MainWindow(QMainWindow):
         self.file_path = None
         self.delimiter = None
 
+    def show_error_message(self, text):
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setText(text)
+        msg_box.setWindowTitle("Error")
+        msg_box.exec()
+
     def open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv);;All Files (*)")
         if file_path:
@@ -105,7 +112,7 @@ class MainWindow(QMainWindow):
                 self.table_view.setModel(self.proxy_model)
                 self.statusBar().showMessage(f"Loaded {self.file_path}", 5000)
             except Exception as e:
-                self.statusBar().showMessage(f"Error loading file: {e}", 5000)
+                self.show_error_message(f"Error loading file: {e}")
 
     def filter_data(self, text):
         if self.proxy_model:
@@ -139,11 +146,11 @@ class MainWindow(QMainWindow):
 
             self.statusBar().showMessage("Profiling report generated and opened.", 5000)
         except FileNotFoundError:
-            self.statusBar().showMessage("Error: csvkit not found. Please ensure it is installed and in your PATH.", 10000)
+            self.show_error_message("Error: csvkit not found. Please ensure it is installed and in your PATH.")
         except subprocess.CalledProcessError as e:
-            self.statusBar().showMessage(f"Error running csvstat: {e.stderr}", 10000)
+            self.show_error_message(f"Error running csvstat: {e.stderr}")
         except Exception as e:
-            self.statusBar().showMessage(f"An unexpected error occurred: {e}", 10000)
+            self.show_error_message(f"An unexpected error occurred: {e}")
 
     def generate_modeling_report(self):
         if self.file_path is None:
@@ -166,11 +173,11 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Modeling report generated successfully.", 5000)
 
         except FileNotFoundError:
-            self.statusBar().showMessage("Error: csvkit not found. Please ensure it is installed and in your PATH.", 10000)
+            self.show_error_message("Error: csvkit not found. Please ensure it is installed and in your PATH.")
         except subprocess.CalledProcessError as e:
-            self.statusBar().showMessage(f"Error running csvstat: {e.stderr}", 10000)
+            self.show_error_message(f"Error running csvstat: {e.stderr}")
         except Exception as e:
-            self.statusBar().showMessage(f"An unexpected error occurred: {e}", 10000)
+            self.show_error_message(f"An unexpected error occurred: {e}")
 
     def closeEvent(self, event):
         QApplication.quit()

@@ -14,12 +14,16 @@ def generate_recommendations(stats_json: str, filename: str) -> str:
     report.append("=" * 35)
     report.append(f"File: {filename}\n")
 
-    if not stats:
-        report.append("No statistics were generated for this file.")
+    if not stats or not isinstance(stats, dict):
+        report.append("No valid statistics were generated for this file.")
         return "\n".join(report)
 
-    # Assume row_count is the same for all columns, get it from the first one.
-    row_count = stats[list(stats.keys())[0]].get('row_count', 0)
+    # Get row count, which should be consistent across all columns
+    first_col_name = next(iter(stats), None)
+    if not first_col_name:
+        report.append("Statistics object is empty.")
+        return "\n".join(report)
+    row_count = stats[first_col_name].get('row_count', 0)
     report.append(f"Total Rows: {row_count}\n")
 
     for col_name, col_stats in stats.items():
@@ -30,7 +34,7 @@ def generate_recommendations(stats_json: str, filename: str) -> str:
         report.append(f"- Inferred Type: {col_type}")
 
         # Uniqueness Analysis
-        unique_count = len(col_stats.get('unique_values', []))
+        unique_count = col_stats.get('unique', 0)
         if row_count > 0:
             uniqueness_pct = (unique_count / row_count) * 100
             report.append(f"- Uniqueness: {unique_count} unique values ({uniqueness_pct:.1f}%)")
