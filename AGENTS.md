@@ -18,21 +18,17 @@ This is a Python/Qt6 application for profiling CSV data.
 
 1.  **Open a CSV file:**
     *   Click on the "Open" button in the toolbar or go to "File -> Open".
-    *   Select a CSV file from your local machine. The application assumes the file is comma-delimited.
+    *   Select a CSV file from your local machine. The application assumes the file is comma-delimited and UTF-8 encoded.
 
 2.  **Filter data:**
     *   Type in the search bar at the top to filter the data in the table. The filtering is case-insensitive and applies to all columns.
 
-3.  **Profile data (using csvstat):**
-    *   Click on the "Profile Data (csvstat)" button or go to "Tools -> Profile Data (csvstat)".
-    *   You will be prompted to select an output format (`.txt`, `.json`, or `.csv`).
-    *   This generates a raw statistical report using `csvkit csvstat`.
-    *   The report is saved to a temporary file and opened automatically.
-
-4.  **Generate Modeling Report:**
-    *   Click on the "Generate Modeling Report" button or go to "Tools -> Generate Modeling Report".
-    *   This analyzes the data and provides data modeling recommendations in a new dialog window.
-    *   The recommendations are based on uniqueness, nulls, cardinality, and other statistical properties.
+3.  **Generate a Report:**
+    *   Click on the "Generate Report" button or go to "Tools -> Generate Report".
+    *   A dialog will appear. Choose the type of profiler you want to use from the dropdown menu.
+    *   Click "Generate".
+    *   A "Save As..." dialog will appear. Choose a location and filename for your report.
+    *   You can choose to have the file opened automatically after it is saved.
 
 ### Sample Data
 

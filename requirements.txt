@@ -2,3 +2,6 @@ PyQt6
 pandas
 setuptools
 csvkit
+ydata-profiling
+sweetviz
+dataprep

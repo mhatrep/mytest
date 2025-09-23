@@ -5,24 +5,44 @@ import tempfile
 import subprocess
 from PyQt6.QtCore import QSortFilterProxyModel, Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
-                             QTableView, QFileDialog, QInputDialog, QLineEdit,
-                             QVBoxLayout, QWidget, QDialog, QTextEdit, QMessageBox)
+                             QTableView, QFileDialog, QLineEdit, QVBoxLayout,
+                             QWidget, QDialog, QTextEdit, QMessageBox,
+                             QComboBox, QPushButton, QFormLayout, QCheckBox)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
+import profilers
 
 
-class ReportDialog(QDialog):
-    def __init__(self, report_text, parent=None):
+class ReportOptionsDialog(QDialog):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Data Modeling Report")
-        self.setGeometry(150, 150, 700, 500)
-        layout = QVBoxLayout(self)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setText(report_text)
-        text_edit.setFontFamily("Courier")
-        layout.addWidget(text_edit)
+        self.setWindowTitle("Generate Report")
+        self.layout = QFormLayout(self)
+
+        self.profiler_combo = QComboBox()
+        self.profiler_combo.addItems([
+            "Data Modeling Report",
+            "csvkit (raw stats)",
+            "YData-Profiling",
+            "Sweetviz",
+            "Dataprep.EDA"
+        ])
+        self.layout.addRow("Select Profiler:", self.profiler_combo)
+
+        self.open_after_save_check = QCheckBox("Open file after saving")
+        self.open_after_save_check.setChecked(True)
+        self.layout.addRow(self.open_after_save_check)
+
+        self.ok_button = QPushButton("Generate")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
+
+    def get_options(self):
+        return {
+            "profiler": self.profiler_combo.currentText(),
+            "open_after_save": self.open_after_save_check.isChecked()
+        }
 
 
 class MainWindow(QMainWindow):
@@ -32,22 +52,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CSV Profiler")
         self.setGeometry(100, 100, 800, 600)
 
-        # Main layout and central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        # Filter input
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter...")
         self.filter_input.textChanged.connect(self.filter_data)
         layout.addWidget(self.filter_input)
 
-        # Table View
         self.table_view = QTableView()
         layout.addWidget(self.table_view)
 
-        # Menu Bar
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
         tools_menu = menu_bar.addMenu("&Tools")
@@ -62,23 +78,15 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        profile_action = QAction("Profile Data (csvstat)", self)
-        profile_action.setStatusTip("Generate a basic profile report using csvstat")
-        profile_action.triggered.connect(self.profile_data)
-        tools_menu.addAction(profile_action)
+        report_action = QAction("Generate Report", self)
+        report_action.setStatusTip("Generate a report from the data")
+        report_action.triggered.connect(self.show_report_dialog)
+        tools_menu.addAction(report_action)
 
-        recommend_action = QAction("Generate Modeling Report", self)
-        recommend_action.setStatusTip("Generate a data modeling recommendation report")
-        recommend_action.triggered.connect(self.generate_modeling_report)
-        tools_menu.addAction(recommend_action)
-
-
-        # Toolbar
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
-        toolbar.addAction(profile_action)
-        toolbar.addAction(recommend_action)
+        toolbar.addAction(report_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -101,7 +109,7 @@ class MainWindow(QMainWindow):
             try:
                 self.file_path = file_path
                 self.delimiter = ","
-                self.df = pd.read_csv(self.file_path, delimiter=self.delimiter)
+                self.df = pd.read_csv(self.file_path, delimiter=self.delimiter, encoding='utf-8')
                 model = PandasModel(self.df)
 
                 self.proxy_model = QSortFilterProxyModel()
@@ -118,66 +126,75 @@ class MainWindow(QMainWindow):
         if self.proxy_model:
             self.proxy_model.setFilterRegularExpression(text)
 
-    def profile_data(self):
-        if self.file_path is None:
-            self.statusBar().showMessage("No data loaded to profile.", 5000)
+    def show_report_dialog(self):
+        if self.df is None:
+            self.show_error_message("Please open a file first.")
             return
 
+        dialog = ReportOptionsDialog(self)
+        if not dialog.exec():
+            return
+
+        options = dialog.get_options()
+        profiler_name = options['profiler']
+        self.statusBar().showMessage(f"Generating report using {profiler_name}...", 10000)
+
+        try:
+            report_content = ""
+            file_ext = ".html"
+            if profiler_name == "Data Modeling Report":
+                command = ["csvstat", "--delimiter", self.delimiter, "--json", self.file_path]
+                result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
+                report_content = generate_recommendations(result.stdout, self.file_path)
+                self.save_report_file(report_content, ".txt", options['open_after_save'])
+            elif profiler_name == "csvkit (raw stats)":
+                self.run_csvkit_profiler(options['open_after_save'])
+            elif profiler_name == "YData-Profiling":
+                report_content = profilers.run_ydata_profiling(self.df)
+                self.save_report_file(report_content, ".html", options['open_after_save'])
+            elif profiler_name == "Sweetviz":
+                report_content = profilers.run_sweetviz(self.df)
+                self.save_report_file(report_content, ".html", options['open_after_save'])
+            elif profiler_name == "Dataprep.EDA":
+                report_content = profilers.run_dataprep(self.df)
+                self.save_report_file(report_content, ".html", options['open_after_save'])
+
+        except Exception as e:
+            self.show_error_message(f"Failed to generate report with {profiler_name}:\n{e}")
+        finally:
+            self.statusBar().clearMessage()
+
+    def run_csvkit_profiler(self, open_after_save):
         formats = ("txt", "json", "csv")
-        output_format, ok = QInputDialog.getItem(self, "Output Format",
+        output_format, ok = QInputDialog.getItem(self, "CSVKit Output Format",
                                                  "Select output format:", formats, 0, False)
         if not ok:
             return
 
-        self.statusBar().showMessage(f"Generating {output_format} report...", 5000)
-        try:
-            command = ["csvstat", "--delimiter", self.delimiter, self.file_path]
-            if output_format == "json":
-                command.insert(1, "--json")
-            elif output_format == "csv":
-                command.insert(1, "--csv")
+        command = ["csvstat", "--delimiter", self.delimiter, self.file_path]
+        if output_format == "json":
+            command.insert(1, "--json")
+        elif output_format == "csv":
+            command.insert(1, "--csv")
 
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            report_content = result.stdout
+        result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
+        report_content = result.stdout
+        self.save_report_file(report_content, f".{output_format}", open_after_save)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_format}", mode="w") as tmp_file:
-                tmp_file.write(report_content)
-                webbrowser.open(f"file://{tmp_file.name}")
-
-            self.statusBar().showMessage("Profiling report generated and opened.", 5000)
-        except FileNotFoundError:
-            self.show_error_message("Error: csvkit not found. Please ensure it is installed and in your PATH.")
-        except subprocess.CalledProcessError as e:
-            self.show_error_message(f"Error running csvstat: {e.stderr}")
-        except Exception as e:
-            self.show_error_message(f"An unexpected error occurred: {e}")
-
-    def generate_modeling_report(self):
-        if self.file_path is None:
-            self.statusBar().showMessage("No data loaded to generate a report.", 5000)
+    def save_report_file(self, content, extension, open_after_save):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Report", f"report{extension}", f"Report Files (*{extension})")
+        if not file_path:
             return
 
-        self.statusBar().showMessage("Generating modeling report...", 10000)
         try:
-            # Get stats as JSON
-            command = ["csvstat", "--delimiter", self.delimiter, "--json", self.file_path]
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            stats_json = result.stdout
-
-            # Generate recommendations
-            report_text = generate_recommendations(stats_json, self.file_path)
-
-            # Display in dialog
-            dialog = ReportDialog(report_text, self)
-            dialog.exec()
-            self.statusBar().showMessage("Modeling report generated successfully.", 5000)
-
-        except FileNotFoundError:
-            self.show_error_message("Error: csvkit not found. Please ensure it is installed and in your PATH.")
-        except subprocess.CalledProcessError as e:
-            self.show_error_message(f"Error running csvstat: {e.stderr}")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self.statusBar().showMessage(f"Report saved to {file_path}", 5000)
+            if open_after_save:
+                webbrowser.open(f"file://{file_path}")
         except Exception as e:
-            self.show_error_message(f"An unexpected error occurred: {e}")
+            self.show_error_message(f"Error saving file: {e}")
+
 
     def closeEvent(self, event):
         QApplication.quit()
