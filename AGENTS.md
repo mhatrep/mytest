@@ -34,7 +34,10 @@ This is a Python/Qt6 application for profiling CSV data.
 
 4.  **Export Unique Values:**
     *   Click on the "Export Unique Values" button or go to "Tools -> Export Unique Values".
-    *   A dialog will appear allowing you to choose if the check should be case-sensitive.
+    *   A dialog will appear with several options:
+        *   **Case Sensitivity**: Choose whether the uniqueness check is case-sensitive.
+        *   **Include Frequency Count**: Choose whether to include the count of each unique value in the output.
+        *   **Sort Order**: Choose to sort the results alphabetically or by frequency (highest to lowest).
     *   You will then be prompted to select an output directory.
     *   The application will create a sub-directory named after your file, and inside it, a separate `.txt` file for each column containing its unique values.
 

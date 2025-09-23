@@ -25,7 +25,16 @@ class UniqueValuesDialog(QDialog):
 
         self.case_sensitive_check = QCheckBox("Case-sensitive")
         self.case_sensitive_check.setChecked(False)
-        self.layout.addRow("Option:", self.case_sensitive_check)
+
+        self.include_frequency_check = QCheckBox("Include frequency count")
+        self.include_frequency_check.setChecked(True)
+
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(["Alphabetical (A-Z)", "Frequency (High to Low)"])
+
+        self.layout.addRow("Case Sensitivity:", self.case_sensitive_check)
+        self.layout.addRow("Frequency Count:", self.include_frequency_check)
+        self.layout.addRow("Sort Order:", self.sort_combo)
 
         self.ok_button = QPushButton("Export")
         self.ok_button.clicked.connect(self.accept)
@@ -33,7 +42,9 @@ class UniqueValuesDialog(QDialog):
 
     def get_options(self):
         return {
-            "case_sensitive": self.case_sensitive_check.isChecked()
+            "case_sensitive": self.case_sensitive_check.isChecked(),
+            "include_frequency": self.include_frequency_check.isChecked(),
+            "sort_by": self.sort_combo.currentText()
         }
 
 
@@ -363,7 +374,7 @@ class MainWindow(QMainWindow):
         base_name = os.path.splitext(os.path.basename(file_path))[0]
         output_dir = os.path.join(dir_path, base_name)
 
-        return exporter.export_unique_values(df, output_dir, options['case_sensitive'])
+        return exporter.export_unique_values(df, output_dir, options)
 
     def _on_export_finished(self, message):
         self.statusBar().showMessage(message, 8000)
