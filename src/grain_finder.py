@@ -6,7 +6,6 @@ def infer_grain_from_csv(
     csv_path: str,
     delimiter: str = ",",
     encoding: str = "utf-8",
-    combo_max: int = 3,
     sample_rows: Optional[int] = None,
     normalize_whitespace: bool = True,
     lowercase_strings: bool = False,
@@ -58,38 +57,29 @@ def infer_grain_from_csv(
     # 3) Per-column distinct counts
     per_column_distinct = {c: int(df[c].nunique(dropna=False)) for c in df.columns}
 
-    # 4) Build a compact “uniqueness summary” like your SQL example
-    #    For all single columns, plus incremental combos up to combo_max
+    # 4) Build a compact “uniqueness summary” using incremental combinations
     rows_summary: List[Dict[str, Any]] = []
-    # Singles
-    for c in df.columns:
-        rows_summary.append({
-            "columns": (c,),
-            "combo_size": 1,
-            "distinct_count": per_column_distinct[c],
-            "distinct_pct": per_column_distinct[c] / total_rows if total_rows else 0.0,
-            "is_unique": per_column_distinct[c] == total_rows
-        })
 
-    # Combos (2..combo_max)
     def _combo_distinct(cols: Tuple[str, ...]) -> int:
         # Fast distinct on tuples of selected columns
         return int(df[list(cols)].drop_duplicates().shape[0])
 
-    tested_combos = set()
-    for k in range(2, min(combo_max, len(df.columns)) + 1):
-        for cols in itertools.combinations(df.columns, k):
-            if cols in tested_combos:
-                continue
-            tested_combos.add(cols)
-            dcount = _combo_distinct(cols)
-            rows_summary.append({
-                "columns": cols,
-                "combo_size": k,
-                "distinct_count": dcount,
-                "distinct_pct": dcount / total_rows if total_rows else 0.0,
-                "is_unique": dcount == total_rows
-            })
+    for k in range(1, len(df.columns) + 1):
+        cols_to_test = tuple(df.columns[:k])
+
+        # Use per-column distinct count for single columns for speed
+        if k == 1:
+            dcount = per_column_distinct[cols_to_test[0]]
+        else:
+            dcount = _combo_distinct(cols_to_test)
+
+        rows_summary.append({
+            "columns": cols_to_test,
+            "combo_size": k,
+            "distinct_count": dcount,
+            "distinct_pct": dcount / total_rows if total_rows else 0.0,
+            "is_unique": dcount == total_rows
+        })
 
     # 5) Find minimal (by size) unique combos = candidate grains
     unique_combos = [r for r in rows_summary if r["is_unique"]]

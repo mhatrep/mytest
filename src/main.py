@@ -25,11 +25,6 @@ class GrainFinderDialog(QDialog):
         self.setWindowTitle("Find Data Grain Options")
         self.layout = QFormLayout(self)
 
-        self.combo_max_spin = QSpinBox()
-        self.combo_max_spin.setRange(1, 10)
-        self.combo_max_spin.setValue(3)
-        self.layout.addRow("Max Combination Size:", self.combo_max_spin)
-
         self.normalize_ws_check = QCheckBox("Normalize Whitespace")
         self.normalize_ws_check.setChecked(True)
         self.layout.addRow("Normalization:", self.normalize_ws_check)
@@ -44,7 +39,6 @@ class GrainFinderDialog(QDialog):
 
     def get_options(self):
         return {
-            "combo_max": self.combo_max_spin.value(),
             "normalize_whitespace": self.normalize_ws_check.isChecked(),
             "lowercase_strings": self.lowercase_check.isChecked()
         }
@@ -535,7 +529,6 @@ class MainWindow(QMainWindow):
 
         return grain_finder.infer_grain_from_csv(
             csv_path=file_path,
-            combo_max=options['combo_max'],
             normalize_whitespace=options['normalize_whitespace'],
             lowercase_strings=options['lowercase_strings']
         )

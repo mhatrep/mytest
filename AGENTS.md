@@ -40,8 +40,8 @@ This is a Python/Qt6 application for profiling CSV data.
 
 5.  **Find Data Grain:**
     *   Click on the "Find Data Grain" button or go to "Tools -> Find Data Grain".
-    *   This feature analyzes combinations of columns to find the smallest set(s) of columns that uniquely identify each row (the "grain" or composite key).
-    *   An options dialog will let you configure the analysis (e.g., the maximum number of columns to combine).
+    *   This feature analyzes incremental combinations of columns based on their order in the file (`C1`, `C1+C2`, `C1+C2+C3`, etc.) to find the smallest set that uniquely identifies each row.
+    *   An options dialog will let you configure normalization options for the analysis.
     *   The results are shown in a new dialog, highlighting any candidate keys found. You can copy the results table to your clipboard from this dialog.
 
 ### Sample Data
