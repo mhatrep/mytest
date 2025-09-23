@@ -20,6 +20,19 @@ def run_ydata_profiling(df: pd.DataFrame) -> str:
     os.unlink(filepath)
     return html_content
 
+def run_csvkit(file_path: str, delimiter: str, output_format: str) -> str:
+    """Generates a raw stats report using csvkit."""
+    import subprocess
+
+    command = ["csvstat", "--delimiter", delimiter, file_path]
+    if output_format == "json":
+        command.insert(1, "--json")
+    elif output_format == "csv":
+        command.insert(1, "--csv")
+
+    result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
+    return result.stdout
+
 def run_sweetviz(df: pd.DataFrame) -> str:
     """Generates a report using Sweetviz."""
     import sweetviz as sv
