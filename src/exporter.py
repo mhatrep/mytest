@@ -18,10 +18,11 @@ def export_unique_values(df: pd.DataFrame, base_path: str, options: dict):
     if not os.path.exists(base_path):
         os.makedirs(base_path)
 
-    for column in df.columns:
+    for i, column in enumerate(df.columns):
         # Sanitize column name for use as a filename
         safe_col_name = "".join(c for c in column if c.isalnum() or c in (' ', '_')).rstrip()
-        output_filename = os.path.join(base_path, f"{safe_col_name}.txt")
+        # Add a zero-padded prefix for column order
+        output_filename = os.path.join(base_path, f"{i+1:02d}_{safe_col_name}.txt")
 
         # --- Core Logic Update ---
         # 1. Treat all data as strings, filling NaNs with a placeholder

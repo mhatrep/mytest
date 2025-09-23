@@ -34,12 +34,15 @@ This is a Python/Qt6 application for profiling CSV data.
 
 4.  **Export Unique Values:**
     *   Click on the "Export Unique Values" button or go to "Tools -> Export Unique Values".
-    *   A dialog will appear with several options:
-        *   **Case Sensitivity**: Choose whether the uniqueness check is case-sensitive.
-        *   **Include Frequency Count**: Choose whether to include the count of each unique value in the output.
-        *   **Sort Order**: Choose to sort the results alphabetically or by frequency (highest to lowest).
+    *   A dialog will appear with several options for case sensitivity, frequency counts, and sorting.
     *   You will then be prompted to select an output directory.
-    *   The application will create a sub-directory named after your file, and inside it, a separate `.txt` file for each column containing its unique values.
+    *   The application will create a sub-directory named after your file, and inside it, a separate `.txt` file for each column (prefixed with the column number) containing its unique values.
+
+5.  **Find Data Grain:**
+    *   Click on the "Find Data Grain" button or go to "Tools -> Find Data Grain".
+    *   This feature analyzes combinations of columns to find the smallest set(s) of columns that uniquely identify each row (the "grain" or composite key).
+    *   An options dialog will let you configure the analysis (e.g., the maximum number of columns to combine).
+    *   The results are shown in a new dialog, highlighting any candidate keys found.
 
 ### Sample Data
 

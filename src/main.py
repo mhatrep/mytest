@@ -9,12 +9,100 @@ from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
-                             QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget)
+                             QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
+                             QSpinBox, QLabel)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
 import profilers
 import exporter
+import grain_finder
+
+
+class GrainFinderDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Find Data Grain Options")
+        self.layout = QFormLayout(self)
+
+        self.combo_max_spin = QSpinBox()
+        self.combo_max_spin.setRange(1, 10)
+        self.combo_max_spin.setValue(3)
+        self.layout.addRow("Max Combination Size:", self.combo_max_spin)
+
+        self.normalize_ws_check = QCheckBox("Normalize Whitespace")
+        self.normalize_ws_check.setChecked(True)
+        self.layout.addRow("Normalization:", self.normalize_ws_check)
+
+        self.lowercase_check = QCheckBox("Lowercase Strings")
+        self.lowercase_check.setChecked(False)
+        self.layout.addRow("", self.lowercase_check)
+
+        self.ok_button = QPushButton("Find Grain")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
+
+    def get_options(self):
+        return {
+            "combo_max": self.combo_max_spin.value(),
+            "normalize_whitespace": self.normalize_ws_check.isChecked(),
+            "lowercase_strings": self.lowercase_check.isChecked()
+        }
+
+
+class DictListModel(QAbstractTableModel):
+    def __init__(self, data=None):
+        super().__init__()
+        self._data = data or []
+        self._headers = list(self._data[0].keys()) if self._data else []
+
+    def rowCount(self, parent=None):
+        return len(self._data)
+
+    def columnCount(self, parent=None):
+        return len(self._headers)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if index.isValid() and role == Qt.ItemDataRole.DisplayRole:
+            row_data = self._data[index.row()]
+            key = self._headers[index.column()]
+            return str(row_data.get(key, ""))
+        return None
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+            return self._headers[section]
+        return None
+
+
+class GrainReportDialog(QDialog):
+    def __init__(self, result_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Data Grain Analysis Report")
+        self.setGeometry(150, 150, 800, 600)
+
+        self.layout = QVBoxLayout(self)
+
+        # Summary Info
+        total_rows = result_data.get("total_rows", "N/A")
+        candidate_grains = result_data.get("candidate_grains", [])
+        grains_str = "\n".join([", ".join(g) for g in candidate_grains]) or "None found"
+
+        summary_text = (
+            f"<b>Total Rows:</b> {total_rows}<br>"
+            f"<b>Candidate Grain(s):</b><br>{grains_str}"
+        )
+        self.summary_label = QLabel(summary_text)
+        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
+        self.layout.addWidget(self.summary_label)
+
+        # Uniqueness Table
+        self.table_view = QTableView()
+        summary_data = result_data.get("uniqueness_summary", [])
+        self.model = DictListModel(summary_data)
+        self.table_view.setModel(self.model)
+        self.table_view.resizeColumnsToContents()
+        self.layout.addWidget(self.table_view)
 
 
 class UniqueValuesDialog(QDialog):
@@ -151,11 +239,17 @@ class MainWindow(QMainWindow):
         export_unique_action.triggered.connect(self.show_export_unique_dialog)
         tools_menu.addAction(export_unique_action)
 
+        grain_finder_action = QAction("Find Data Grain", self)
+        grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
+        grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
+        tools_menu.addAction(grain_finder_action)
+
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
         toolbar.addAction(self.report_action)
         toolbar.addAction(export_unique_action)
+        toolbar.addAction(grain_finder_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -378,6 +472,54 @@ class MainWindow(QMainWindow):
 
     def _on_export_finished(self, message):
         self.statusBar().showMessage(message, 8000)
+
+    def show_grain_finder_dialog(self):
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0:
+            self.show_error_message("Please open a file first.")
+            return
+
+        if self.thread is not None and self.thread.isRunning():
+            self.show_error_message("Another process is already running.")
+            return
+
+        dialog = GrainFinderDialog(self)
+        if not dialog.exec():
+            return
+
+        options = dialog.get_options()
+
+        self.thread = QThread()
+        self.worker = Worker(self._run_grain_finder_task, options)
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_grain_finder_finished)
+        self.worker.error.connect(self.show_error_message)
+
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+
+        self.thread.start()
+        self.statusBar().showMessage("Finding data grain... this may take a while.")
+
+    def _run_grain_finder_task(self, options):
+        current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
+        file_path = current_tab_data['file_path']
+
+        return grain_finder.infer_grain_from_csv(
+            csv_path=file_path,
+            combo_max=options['combo_max'],
+            normalize_whitespace=options['normalize_whitespace'],
+            lowercase_strings=options['lowercase_strings']
+        )
+
+    def _on_grain_finder_finished(self, result_data):
+        self.statusBar().clearMessage()
+        dialog = GrainReportDialog(result_data, self)
+        dialog.exec()
 
     def closeEvent(self, event):
         QApplication.quit()
