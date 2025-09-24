@@ -119,6 +119,34 @@ class HierarchyReportDialog(QDialog):
             msg_box.exec()
 
 
+class HierarchyOptionsDialog(QDialog):
+    def __init__(self, columns: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Find Hierarchies Options")
+        self.layout = QFormLayout(self)
+
+        self.parent_combo = QComboBox()
+        self.parent_combo.addItems(columns)
+        self.layout.addRow("Parent Column:", self.parent_combo)
+
+        self.child_combo = QComboBox()
+        self.child_combo.addItems(columns)
+        # Select second item by default if available
+        if len(columns) > 1:
+            self.child_combo.setCurrentIndex(1)
+        self.layout.addRow("Child Column:", self.child_combo)
+
+        self.ok_button = QPushButton("Find Hierarchies")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
+
+    def get_options(self):
+        return {
+            "parent_col": self.parent_combo.currentText(),
+            "child_col": self.child_combo.currentText()
+        }
+
+
 class GrainReportDialog(QDialog):
     def __init__(self, result_data: dict, parent=None):
         super().__init__(parent)
@@ -604,8 +632,23 @@ class MainWindow(QMainWindow):
             self.show_error_message("Another process is already running.")
             return
 
+        current_tab_data = self.tabs_data[current_index]
+        columns = list(current_tab_data['df'].columns)
+        if len(columns) < 2:
+            self.show_error_message("You need at least two columns to find a hierarchy.")
+            return
+
+        dialog = HierarchyOptionsDialog(columns, self)
+        if not dialog.exec():
+            return
+
+        options = dialog.get_options()
+        if options['parent_col'] == options['child_col']:
+            self.show_error_message("Parent and Child columns cannot be the same.")
+            return
+
         self.thread = QThread()
-        self.worker = Worker(self._run_hierarchy_finder_task)
+        self.worker = Worker(self._run_hierarchy_finder_task, options)
         self.worker.moveToThread(self.thread)
 
         self.thread.started.connect(self.worker.run)
@@ -620,10 +663,14 @@ class MainWindow(QMainWindow):
         self.thread.start()
         self.statusBar().showMessage("Finding hierarchies... this may take a while.")
 
-    def _run_hierarchy_finder_task(self):
+    def _run_hierarchy_finder_task(self, options):
         current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
         df = current_tab_data['df']
-        return hierarchy_finder.analyze_hierarchies(df)
+        return hierarchy_finder.build_hierarchies_from_columns(
+            df,
+            parent_col=options['parent_col'],
+            child_col=options['child_col']
+        )
 
     def _on_hierarchy_finder_finished(self, analysis_result):
         self.statusBar().clearMessage()

@@ -1,60 +1,40 @@
 import pandas as pd
-import itertools
 from collections import defaultdict
-from typing import List, Dict, Any
+from typing import Dict, Any
 
-def analyze_hierarchies(df: pd.DataFrame) -> Dict[str, Any]:
+def build_hierarchies_from_columns(df: pd.DataFrame, parent_col: str, child_col: str) -> Dict[str, Any]:
     """
-    Analyzes a DataFrame to find hierarchical relationships (functional dependencies)
-    by checking all pairs of columns. This is the robust, correct implementation.
+    Takes a DataFrame and two specified column names (parent and child) and
+    builds a hierarchy tree from the data in those columns.
     """
     df_copy = df.copy()
 
-    for col in df_copy.columns:
-        df_copy[col] = df_copy[col].fillna('').astype(str).str.strip()
+    # Normalize the relevant columns to strings
+    df_copy[parent_col] = df_copy[parent_col].fillna('').astype(str).str.strip()
+    df_copy[child_col] = df_copy[child_col].fillna('').astype(str).str.strip()
 
-    columns = df_copy.columns
-    dependencies = []
-
-    for child_col, parent_col in itertools.permutations(columns, 2):
-        if child_col == parent_col:
-            continue
-
-        subset_df = df_copy[[child_col, parent_col]]
-        # A blank child value is not a valid node in a hierarchy
-        subset_df = subset_df[subset_df[child_col] != '']
-
-        if subset_df.empty:
-            continue
-
-        # A child is dependent on a parent if each child value maps to exactly one parent value.
-        # We group by the child and count the number of unique parents.
-        # We also drop rows where the parent is blank, as a blank parent isn't a real entity.
-        counts = subset_df[subset_df[parent_col] != ''].groupby(child_col)[parent_col].nunique()
-
-        # If the counts series is empty (e.g., all parents were blank), there's no dependency.
-        if counts.empty:
-            continue
-
-        # If all children have exactly 1 parent, it's a potential dependency
-        if (counts == 1).all():
-            # To be a hierarchy, the parent must have multiple children for at least one value.
-            # Otherwise, it's a 1-to-1 mapping which isn't a hierarchy.
-            parent_counts = subset_df.groupby(parent_col)[child_col].nunique()
-            if (parent_counts > 1).any():
-                dependencies.append((parent_col, child_col))
-
-    # --- Process the found dependencies to build chains ---
-    child_to_parent_map = {child: parent for parent, child in dependencies}
+    # Build the tree of parent-child relationships from the specified columns
     parent_to_children_map = defaultdict(list)
-    all_nodes = set()
-    for parent, child in dependencies:
-        parent_to_children_map[parent].append(child)
-        all_nodes.add(parent)
-        all_nodes.add(child)
+    all_children = set()
 
-    # Roots are nodes that appear as parents but never as children.
-    roots = sorted(list(set(parent_to_children_map.keys()) - set(child_to_parent_map.keys())))
+    for _, row in df_copy.iterrows():
+        parent, child = row[parent_col], row[child_col]
+        # A blank child name is not a valid node
+        if not child:
+            continue
+
+        parent_to_children_map[parent].append(child)
+        all_children.add(child)
+
+    # Roots are parents that are never themselves a child in any relationship
+    # This includes the special '' parent for top-level nodes
+    all_parents = set(parent_to_children_map.keys())
+    roots = sorted(list(all_parents - all_children))
+
+    # The dependencies are simply the unique pairs from the data
+    dependencies = sorted(list(set(tuple(row) for row in df_copy[[parent_col, child_col]].values)))
+
+    all_nodes = all_parents.union(all_children)
 
     return {
         "dependencies": dependencies,
@@ -70,28 +50,35 @@ def format_text_report(analysis_result: Dict[str, Any]) -> str:
     parent_to_children = analysis_result["parent_to_children"]
 
     if not dependencies:
-        return "No clear hierarchical relationships found."
+        return "No hierarchical relationships found in the selected columns."
 
     report_lines = ["Found Hierarchy Chains:\n"]
 
     def find_chains_recursive(node, current_chain):
-        new_chain = current_chain + [node]
+        # Don't include the artificial blank root in the display
+        if node:
+            current_chain.append(node)
+
         children = parent_to_children.get(node, [])
 
+        # If this node has no children, we're at the end of a chain
         if not children:
-            report_lines.append(" -> ".join(new_chain))
+            if current_chain:
+                report_lines.append(" -> ".join(current_chain))
             return
 
         for child in sorted(children):
-            find_chains_recursive(child, list(new_chain))
+            find_chains_recursive(child, list(current_chain))
 
     if not roots:
-        report_lines.append("Could not determine hierarchy roots (possible circular dependencies).")
-        report_lines.append("\nFound individual parent-child relationships:")
-        for parent, child in sorted(dependencies):
-            report_lines.append(f"- {parent} -> {child}")
-    else:
-        for root in roots:
+        return "Could not determine hierarchy roots (possible circular dependencies)."
+
+    for root in roots:
+        # If the root is the blank parent, start traversal from its children
+        if root == '':
+            for child_node in sorted(parent_to_children.get('', [])):
+                find_chains_recursive(child_node, [])
+        else:
             find_chains_recursive(root, [])
 
     return "\n".join(report_lines)
@@ -106,10 +93,12 @@ def format_graphviz_dot(analysis_result: Dict[str, Any]) -> str:
 
     dot_lines = ['digraph G {', '  rankdir=LR;', '  node [shape=box];']
     for node in sorted(list(all_nodes)):
-         if node: dot_lines.append(f'  "{node}";')
+        if node: # Don't draw the artificial blank root
+            dot_lines.append(f'  "{node}";')
 
     for parent, child in dependencies:
-        if parent and child: dot_lines.append(f'  "{parent}" -> "{child}";')
+        if parent and child:
+            dot_lines.append(f'  "{parent}" -> "{child}";')
 
     dot_lines.append('}')
     return "\n".join(dot_lines)
