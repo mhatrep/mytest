@@ -47,8 +47,8 @@ This is a Python/Qt6 application for profiling CSV data.
 6.  **Find Hierarchies:**
     *   Click on the "Find Hierarchies" button or go to "Tools -> Find Hierarchies".
     *   This feature is designed to reconstruct a hierarchy from a parent-child list within your data.
-    *   An options dialog will appear, prompting you to select which column contains the "Parent" values and which contains the "Child" values.
-    *   The tool then builds the full hierarchy chains from these pairs and displays them in a report. You can export this report to text, Graphviz (.dot), or Mermaid.js formats.
+    *   An options dialog will appear, prompting you to select which column contains the "Parent" values and which contains the "Child" values. A "Swap" button is available for convenience.
+    *   The tool then builds the full hierarchy chains from these pairs and displays them in a report. From the report window, you can export the results to a file or copy them to the clipboard in various formats (Text, Graphviz, Mermaid.js).
 
 ### Sample Data
 

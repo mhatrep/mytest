@@ -80,15 +80,38 @@ class HierarchyReportDialog(QDialog):
         self.layout = QVBoxLayout(self)
 
         text_report = hierarchy_finder.format_text_report(self.analysis_result)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setText(text_report)
-        text_edit.setFontFamily("Courier")
-        self.layout.addWidget(text_edit)
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setText(text_report)
+        self.text_edit.setFontFamily("Courier")
+        self.layout.addWidget(self.text_edit)
 
-        self.export_button = QPushButton("Export Report...")
+        self.button_layout = QHBoxLayout()
+        self.export_button = QPushButton("Export to File...")
         self.export_button.clicked.connect(self.show_export_dialog)
-        self.layout.addWidget(self.export_button)
+        self.copy_button = QPushButton("Copy to Clipboard...")
+        self.copy_button.clicked.connect(self.show_copy_dialog)
+        self.button_layout.addWidget(self.export_button)
+        self.button_layout.addWidget(self.copy_button)
+        self.layout.addLayout(self.button_layout)
+
+    def show_copy_dialog(self):
+        formats = {
+            "Text Report": (hierarchy_finder.format_text_report, ".txt"),
+            "Graphviz (.dot)": (hierarchy_finder.format_graphviz_dot, ".dot"),
+            "Mermaid.js (.md)": (hierarchy_finder.format_mermaid_js, ".md")
+        }
+        chosen_format, ok = QInputDialog.getItem(self, "Select Format to Copy",
+                                                 "Format:", formats.keys(), 0, False)
+        if not ok:
+            return
+
+        formatter, _ = formats[chosen_format]
+        report_content = formatter(self.analysis_result)
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(report_content)
+        # Maybe add a status tip here later
 
     def show_export_dialog(self):
         formats = {
@@ -136,9 +159,19 @@ class HierarchyOptionsDialog(QDialog):
             self.child_combo.setCurrentIndex(1)
         self.layout.addRow("Child Column:", self.child_combo)
 
+        self.swap_button = QPushButton("Swap")
+        self.swap_button.clicked.connect(self.swap_columns)
+        self.layout.addWidget(self.swap_button)
+
         self.ok_button = QPushButton("Find Hierarchies")
         self.ok_button.clicked.connect(self.accept)
         self.layout.addRow(self.ok_button)
+
+    def swap_columns(self):
+        parent_index = self.parent_combo.currentIndex()
+        child_index = self.child_combo.currentIndex()
+        self.parent_combo.setCurrentIndex(child_index)
+        self.child_combo.setCurrentIndex(parent_index)
 
     def get_options(self):
         return {
