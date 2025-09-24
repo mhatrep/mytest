@@ -1,97 +1,62 @@
 import pandas as pd
-import itertools
 from collections import defaultdict
-from typing import List, Dict, Any, Tuple
 
-def analyze_hierarchies(df: pd.DataFrame) -> Dict[str, Any]:
+def find_hierarchies_from_adjacency_list(df: pd.DataFrame) -> str:
     """
-    Analyzes a DataFrame to find hierarchical relationships (functional dependencies).
-    Returns a dictionary containing the raw dependency data.
+    Analyzes a two-column DataFrame representing a parent-child adjacency list
+    and reconstructs the full hierarchies.
+
+    Args:
+        df (pd.DataFrame): A DataFrame with exactly two columns, assumed to be
+                           [parent, child].
+
+    Returns:
+        A formatted string reporting the discovered hierarchies.
     """
-    df = df.astype(str)
-    columns = df.columns
-    dependencies = []
+    if df.shape[1] != 2:
+        return (
+            "Error: This function requires a file with exactly two columns "
+            "representing a parent-child list."
+        )
 
-    for child_col, parent_col in itertools.permutations(columns, 2):
-        subset_df = df[[child_col, parent_col]].drop_duplicates()
-        counts = subset_df.groupby(child_col)[parent_col].nunique()
+    parent_col, child_col = df.columns[0], df.columns[1]
 
-        if (counts == 1).all():
-            parent_counts = subset_df.groupby(parent_col)[child_col].nunique()
-            if not (parent_counts > 1).any():
-                continue
-            dependencies.append((parent_col, child_col))
+    # Pre-process data: treat all as strings and handle blanks/NaNs
+    df[parent_col] = df[parent_col].fillna('').astype(str)
+    df[child_col] = df[child_col].fillna('').astype(str)
 
-    child_to_parent = dict(reversed(dep) for dep in dependencies)
+    # Build the tree of parent-child relationships
     parent_to_children = defaultdict(list)
-    for parent, child in dependencies:
-        parent_to_children[parent].append(child)
+    for _, row in df.iterrows():
+        parent, child = row[parent_col].strip(), row[child_col].strip()
+        if parent and child:
+            parent_to_children[parent].append(child)
+        # Also capture root nodes that have a blank parent
+        elif not parent and child:
+            parent_to_children['__ROOT__'].append(child)
 
-    roots = sorted(list(set(parent_to_children.keys()) - set(child_to_parent.keys())))
-
-    return {
-        "dependencies": dependencies,
-        "roots": roots,
-        "parent_to_children": parent_to_children
-    }
-
-def format_text_report(analysis_result: Dict[str, Any]) -> str:
-    """Formats the hierarchy analysis into a human-readable text report."""
-    dependencies = analysis_result["dependencies"]
-    roots = analysis_result["roots"]
-    parent_to_children = analysis_result["parent_to_children"]
-
-    if not dependencies:
-        return "No clear hierarchical relationships found."
+    if '__ROOT__' not in parent_to_children:
+        return "No root nodes found (i.e., no items with a blank parent). Cannot determine hierarchies."
 
     report_lines = ["Found Hierarchy Chains:\n"]
 
+    # Function to perform a depth-first search to build chain strings
     def find_chains(node, current_chain):
-        new_chain = current_chain + [node]
-        if node not in parent_to_children:
-            report_lines.append(" -> ".join(new_chain))
-            return
-        for child in parent_to_children[node]:
-            find_chains(child, new_chain)
+        current_chain.append(node)
 
-    if not roots:
-        report_lines.append("Could not determine hierarchy roots (possible circular dependencies).")
-        report_lines.append("\nFound individual parent-child relationships:")
-        for parent, child in dependencies:
-            report_lines.append(f"- {parent} -> {child}")
-    else:
-        for root in roots:
-            find_chains(root, [])
+        children = parent_to_children.get(node, [])
+
+        # If this node has no children, we're at the end of a chain
+        if not children:
+            report_lines.append(" -> ".join(current_chain))
+            return
+
+        # Recurse for all children
+        for child in sorted(children):
+            find_chains(child, list(current_chain))
+
+    # Build chains starting from each root-level node
+    for root_node in sorted(parent_to_children['__ROOT__']):
+        find_chains(root_node, [])
 
     return "\n".join(report_lines)
-
-def format_graphviz_dot(analysis_result: Dict[str, Any]) -> str:
-    """Formats the hierarchy analysis into a Graphviz .dot file string."""
-    dependencies = analysis_result["dependencies"]
-    if not dependencies:
-        return 'digraph G {\n  label="No hierarchies found";\n}'
-
-    dot_lines = ['digraph G {', '  rankdir=LR;']
-    nodes = set()
-    for parent, child in dependencies:
-        nodes.add(parent)
-        nodes.add(child)
-        dot_lines.append(f'  "{parent}" -> "{child}";')
-
-    for node in sorted(list(nodes)):
-         dot_lines.append(f'  "{node}" [shape=box];')
-
-    dot_lines.append('}')
-    return "\n".join(dot_lines)
-
-def format_mermaid_js(analysis_result: Dict[str, Any]) -> str:
-    """Formats the hierarchy analysis into a Mermaid.js graph string."""
-    dependencies = analysis_result["dependencies"]
-    if not dependencies:
-        return 'graph TD;\n  subgraph No Hierarchies Found\n  end'
-
-    mermaid_lines = ['graph TD;']
-    for parent, child in dependencies:
-        mermaid_lines.append(f'  {parent}["{parent}"] --> {child}["{child}"];')
-
-    return "\n".join(mermaid_lines)

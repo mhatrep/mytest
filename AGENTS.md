@@ -44,10 +44,11 @@ This is a Python/Qt6 application for profiling CSV data.
     *   An options dialog will let you configure normalization options for the analysis.
     *   The results are shown in a new dialog, highlighting any candidate keys found. You can copy the results table to your clipboard from this dialog.
 
-6.  **Find Hierarchies:**
+6.  **Find Hierarchies (from Adjacency List):**
     *   Click on the "Find Hierarchies" button or go to "Tools -> Find Hierarchies".
-    *   This feature analyzes all pairs of columns to detect one-to-many relationships, which indicate a hierarchy (e.g., `Parent -> Child`).
-    *   The results are displayed in a new report dialog. From this dialog, you can click "Export Report..." to save the hierarchy data in different formats, including Graphviz (.dot) and Mermaid.js for visualization.
+    *   This feature is designed to work on files with exactly two columns that represent a parent-child list (also known as an adjacency list).
+    *   It reads the parent-child pairs and reconstructs the full hierarchy chains (e.g., `Country -> State -> City`).
+    *   The results are displayed in a new report dialog.
 
 ### Sample Data
 

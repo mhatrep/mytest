@@ -70,51 +70,17 @@ class DictListModel(QAbstractTableModel):
         return None
 
 
-class HierarchyReportDialog(QDialog):
-    def __init__(self, analysis_result: dict, parent=None):
+class TextReportDialog(QDialog):
+    def __init__(self, title: str, text: str, parent=None):
         super().__init__(parent)
-        self.analysis_result = analysis_result
-        self.setWindowTitle("Hierarchy Report")
+        self.setWindowTitle(title)
         self.setGeometry(150, 150, 700, 500)
-
-        self.layout = QVBoxLayout(self)
-
-        text_report = hierarchy_finder.format_text_report(self.analysis_result)
+        layout = QVBoxLayout(self)
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
-        text_edit.setText(text_report)
+        text_edit.setText(text)
         text_edit.setFontFamily("Courier")
-        self.layout.addWidget(text_edit)
-
-        self.export_button = QPushButton("Export Report...")
-        self.export_button.clicked.connect(self.show_export_dialog)
-        self.layout.addWidget(self.export_button)
-
-    def show_export_dialog(self):
-        formats = {
-            "Graphviz (.dot)": (hierarchy_finder.format_graphviz_dot, ".dot"),
-            "Mermaid.js (.md)": (hierarchy_finder.format_mermaid_js, ".md"),
-            "Text Report (.txt)": (hierarchy_finder.format_text_report, ".txt")
-        }
-        chosen_format, ok = QInputDialog.getItem(self, "Select Export Format",
-                                                 "Format:", formats.keys(), 0, False)
-        if not ok:
-            return
-
-        formatter, extension = formats[chosen_format]
-        report_content = formatter(self.analysis_result)
-
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Report", f"hierarchy_report{extension}", f"Report Files (*{extension})")
-        if not file_path:
-            return
-
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(report_content)
-        except Exception as e:
-            # In a real app, we'd show this error in the main window's status bar
-            # or a message box, but for simplicity, we'll print it.
-            print(f"Error saving file: {e}")
+        layout.addWidget(text_edit)
 
 
 class GrainReportDialog(QDialog):
@@ -621,11 +587,11 @@ class MainWindow(QMainWindow):
     def _run_hierarchy_finder_task(self):
         current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
         df = current_tab_data['df']
-        return hierarchy_finder.analyze_hierarchies(df)
+        return hierarchy_finder.find_hierarchies_from_adjacency_list(df)
 
-    def _on_hierarchy_finder_finished(self, analysis_result):
+    def _on_hierarchy_finder_finished(self, result_text):
         self.statusBar().clearMessage()
-        dialog = HierarchyReportDialog(analysis_result, self)
+        dialog = TextReportDialog("Hierarchy Report", result_text, self)
         dialog.exec()
 
     def closeEvent(self, event):
