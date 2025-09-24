@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
