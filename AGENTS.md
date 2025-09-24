@@ -47,7 +47,7 @@ This is a Python/Qt6 application for profiling CSV data.
 6.  **Find Hierarchies:**
     *   Click on the "Find Hierarchies" button or go to "Tools -> Find Hierarchies".
     *   This feature analyzes all pairs of columns to detect one-to-many relationships, which indicate a hierarchy (e.g., `Parent -> Child`).
-    *   The results, including any chained hierarchies found (e.g., `Country -> State -> City`), are displayed in a new report dialog.
+    *   The results are displayed in a new report dialog. From this dialog, you can click "Export Report..." to save the hierarchy data in different formats, including Graphviz (.dot) and Mermaid.js for visualization.
 
 ### Sample Data
 
