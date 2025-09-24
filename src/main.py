@@ -18,6 +18,43 @@ import profilers
 import exporter
 import grain_finder
 import hierarchy_finder
+import key_detector
+
+
+class KeyDetectorOptionsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Detect Keys Options")
+        self.layout = QFormLayout(self)
+        # Options will be added in a later phase
+        self.ok_button = QPushButton("Run Analysis")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
+
+    def get_options(self):
+        # To be expanded in later phases
+        return {}
+
+
+class KeyDetectorReportDialog(QDialog):
+    def __init__(self, result_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Primary Key Candidate Report")
+        self.setGeometry(150, 150, 800, 600)
+        self.layout = QVBoxLayout(self)
+
+        total_rows = result_data.get("total_rows", "N/A")
+        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
+        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
+        self.layout.addWidget(self.summary_label)
+
+        self.table_view = QTableView()
+        candidates = result_data.get("candidates", [])
+        # The model expects a list of dicts, so this is correct
+        self.model = DictListModel(candidates)
+        self.table_view.setModel(self.model)
+        self.table_view.resizeColumnsToContents()
+        self.layout.addWidget(self.table_view)
 
 
 class GrainFinderDialog(QDialog):
@@ -346,7 +383,15 @@ class MainWindow(QMainWindow):
 
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
+        data_menu = menu_bar.addMenu("&Data")
         tools_menu = menu_bar.addMenu("&Tools")
+
+        analysis_menu = data_menu.addMenu("Analyze")
+
+        detect_keys_action = QAction("Detect Keys...", self)
+        detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
+        detect_keys_action.triggered.connect(self.show_key_detector_dialog)
+        analysis_menu.addAction(detect_keys_action)
 
         open_action = QAction("Open", self)
         open_action.setStatusTip("Open a CSV file")
@@ -381,6 +426,8 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
+        toolbar.addAction(detect_keys_action)
+        toolbar.addSeparator()
         toolbar.addAction(self.report_action)
         toolbar.addAction(export_unique_action)
         toolbar.addAction(grain_finder_action)
@@ -653,6 +700,52 @@ class MainWindow(QMainWindow):
     def _on_grain_finder_finished(self, result_data):
         self.statusBar().clearMessage()
         dialog = GrainReportDialog(result_data, self)
+        dialog.exec()
+
+    def show_key_detector_dialog(self):
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0:
+            self.show_error_message("Please open a file first.")
+            return
+
+        if self.thread is not None and self.thread.isRunning():
+            self.show_error_message("Another process is already running.")
+            return
+
+        dialog = KeyDetectorOptionsDialog(self)
+        if not dialog.exec():
+            return
+
+        options = dialog.get_options()
+
+        self.thread = QThread()
+        self.worker = Worker(self._run_key_detector_task, options)
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_key_detector_finished)
+        self.worker.error.connect(self.show_error_message)
+
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+
+        self.thread.start()
+        self.statusBar().showMessage("Detecting primary key candidates... this may take a while.")
+
+    def _run_key_detector_task(self, options):
+        current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
+        file_path = current_tab_data['file_path']
+
+        # In later phases, options will be passed in
+        return key_detector.detect_single_column_keys(
+            csv_path=file_path
+        )
+
+    def _on_key_detector_finished(self, result_data):
+        self.statusBar().clearMessage()
+        dialog = KeyDetectorReportDialog(result_data, self)
         dialog.exec()
 
     def show_hierarchy_finder_dialog(self):

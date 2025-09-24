@@ -50,6 +50,12 @@ This is a Python/Qt6 application for profiling CSV data.
     *   An options dialog will appear, prompting you to select which column contains the "Parent" values and which contains the "Child" values. A "Swap" button is available for convenience.
     *   The tool then builds the full hierarchy chains from these pairs and displays them in a report. From the report window, you can export the results to a file or copy them to the clipboard in various formats (Text, Graphviz, Mermaid.js).
 
+7.  **Detect Keys (Phase 1: Single Column):**
+    *   Go to "Data -> Analyze -> Detect Keys...".
+    *   This feature scans the entire file to find single-column primary key candidates.
+    *   It analyzes each column based on its uniqueness and null rate.
+    *   The results are shown in a new dialog, ranked by their suitability as a primary key.
+
 ### Sample Data
 
 A sample CSV file named `sample_data.csv` is included in the root of the project. You can use this file to test the application.
