@@ -17,6 +17,7 @@ from reporter import generate_recommendations
 import profilers
 import exporter
 import grain_finder
+import hierarchy_finder
 
 
 class GrainFinderDialog(QDialog):
@@ -67,6 +68,19 @@ class DictListModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
             return self._headers[section]
         return None
+
+
+class TextReportDialog(QDialog):
+    def __init__(self, title: str, text: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setGeometry(150, 150, 700, 500)
+        layout = QVBoxLayout(self)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setText(text)
+        text_edit.setFontFamily("Courier")
+        layout.addWidget(text_edit)
 
 
 class GrainReportDialog(QDialog):
@@ -262,12 +276,18 @@ class MainWindow(QMainWindow):
         grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
         tools_menu.addAction(grain_finder_action)
 
+        hierarchy_finder_action = QAction("Find Hierarchies", self)
+        hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
+        hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
+        tools_menu.addAction(hierarchy_finder_action)
+
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
         toolbar.addAction(self.report_action)
         toolbar.addAction(export_unique_action)
         toolbar.addAction(grain_finder_action)
+        toolbar.addAction(hierarchy_finder_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -536,6 +556,42 @@ class MainWindow(QMainWindow):
     def _on_grain_finder_finished(self, result_data):
         self.statusBar().clearMessage()
         dialog = GrainReportDialog(result_data, self)
+        dialog.exec()
+
+    def show_hierarchy_finder_dialog(self):
+        current_index = self.tab_widget.currentIndex()
+        if current_index < 0:
+            self.show_error_message("Please open a file first.")
+            return
+
+        if self.thread is not None and self.thread.isRunning():
+            self.show_error_message("Another process is already running.")
+            return
+
+        self.thread = QThread()
+        self.worker = Worker(self._run_hierarchy_finder_task)
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_hierarchy_finder_finished)
+        self.worker.error.connect(self.show_error_message)
+
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+
+        self.thread.start()
+        self.statusBar().showMessage("Finding hierarchies... this may take a while.")
+
+    def _run_hierarchy_finder_task(self):
+        current_tab_data = self.tabs_data[self.tab_widget.currentIndex()]
+        df = current_tab_data['df']
+        return hierarchy_finder.find_hierarchies(df)
+
+    def _on_hierarchy_finder_finished(self, result_text):
+        self.statusBar().clearMessage()
+        dialog = TextReportDialog("Hierarchy Report", result_text, self)
         dialog.exec()
 
     def closeEvent(self, event):

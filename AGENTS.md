@@ -44,6 +44,11 @@ This is a Python/Qt6 application for profiling CSV data.
     *   An options dialog will let you configure normalization options for the analysis.
     *   The results are shown in a new dialog, highlighting any candidate keys found. You can copy the results table to your clipboard from this dialog.
 
+6.  **Find Hierarchies:**
+    *   Click on the "Find Hierarchies" button or go to "Tools -> Find Hierarchies".
+    *   This feature analyzes all pairs of columns to detect one-to-many relationships, which indicate a hierarchy (e.g., `Parent -> Child`).
+    *   The results, including any chained hierarchies found (e.g., `Country -> State -> City`), are displayed in a new report dialog.
+
 ### Sample Data
 
 A sample CSV file named `sample_data.csv` is included in the root of the project. You can use this file to test the application.
