@@ -421,7 +421,16 @@ class MainWindow(QMainWindow):
 
         # Add themes to the View menu
         themes_menu = view_menu.addMenu("Themes")
-        for theme in qt_material.list_themes():
+        # Pre-selected list of popular themes
+        popular_themes = [
+            'dark_blue.xml',
+            'dark_cyan.xml',
+            'dark_teal.xml',
+            'light_blue.xml',
+            'light_cyan.xml',
+            'light_teal.xml'
+        ]
+        for theme in popular_themes:
             action = QAction(theme.replace('.xml', '').replace('_', ' ').title(), self)
             action.triggered.connect(partial(self.apply_theme, theme))
             themes_menu.addAction(action)
