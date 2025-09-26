@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QAbstractItemView)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
@@ -35,27 +35,6 @@ class KeyDetectorOptionsDialog(QDialog):
     def get_options(self):
         # To be expanded in later phases
         return {}
-
-
-class KeyDetectorReportDialog(QDialog):
-    def __init__(self, result_data: dict, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Primary Key Candidate Report")
-        self.setGeometry(150, 150, 800, 600)
-        self.layout = QVBoxLayout(self)
-
-        total_rows = result_data.get("total_rows", "N/A")
-        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
-        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
-        self.layout.addWidget(self.summary_label)
-
-        self.table_view = QTableView()
-        candidates = result_data.get("candidates", [])
-        # The model expects a list of dicts, so this is correct
-        self.model = DictListModel(candidates)
-        self.table_view.setModel(self.model)
-        self.table_view.resizeColumnsToContents()
-        self.layout.addWidget(self.table_view)
 
 
 class QueryReportDialog(QDialog):
@@ -86,6 +65,27 @@ class QueryReportDialog(QDialog):
         clipboard.setText(self.text_edit.toPlainText())
         if self.parent() and hasattr(self.parent(), 'statusBar'):
             self.parent().statusBar().showMessage("Queries copied to clipboard!", 3000)
+
+
+class KeyDetectorReportDialog(QDialog):
+    def __init__(self, result_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Primary Key Candidate Report")
+        self.setGeometry(150, 150, 800, 600)
+        self.layout = QVBoxLayout(self)
+
+        total_rows = result_data.get("total_rows", "N/A")
+        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
+        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
+        self.layout.addWidget(self.summary_label)
+
+        self.table_view = QTableView()
+        candidates = result_data.get("candidates", [])
+        # The model expects a list of dicts, so this is correct
+        self.model = DictListModel(candidates)
+        self.table_view.setModel(self.model)
+        self.table_view.resizeColumnsToContents()
+        self.layout.addWidget(self.table_view)
 
 
 class GrainFinderDialog(QDialog):
@@ -414,7 +414,6 @@ class MainWindow(QMainWindow):
 
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
-        edit_menu = menu_bar.addMenu("&Edit")
         data_menu = menu_bar.addMenu("&Data")
         tools_menu = menu_bar.addMenu("&Tools")
 
@@ -430,28 +429,10 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
-        self.save_as_action = QAction("Save As...", self)
-        self.save_as_action.setStatusTip("Save the current table to a new CSV file")
-        self.save_as_action.triggered.connect(self.save_file_as)
-        file_menu.addAction(self.save_as_action)
-
-        file_menu.addSeparator()
-
         exit_action = QAction("Exit", self)
         exit_action.setStatusTip("Exit the application")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-
-        # --- Edit Menu Actions ---
-        self.insert_row_action = QAction("Insert Row", self)
-        self.insert_row_action.setStatusTip("Insert a new row into the table")
-        self.insert_row_action.triggered.connect(self.insert_row)
-        edit_menu.addAction(self.insert_row_action)
-
-        self.delete_row_action = QAction("Delete Row(s)", self)
-        self.delete_row_action.setStatusTip("Delete the selected row(s)")
-        self.delete_row_action.triggered.connect(self.delete_row)
-        edit_menu.addAction(self.delete_row_action)
 
         self.report_action = QAction("Generate Report", self)
         self.report_action.setStatusTip("Generate a report from the data")
@@ -483,11 +464,8 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.insert_row_action)
-        toolbar.addAction(self.delete_row_action)
-        toolbar.addSeparator()
         toolbar.addAction(detect_keys_action)
+        toolbar.addSeparator()
         toolbar.addAction(self.report_action)
         toolbar.addAction(export_unique_action)
         toolbar.addAction(grain_finder_action)
@@ -531,8 +509,6 @@ class MainWindow(QMainWindow):
                 proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
                 proxy_model.setFilterKeyColumn(-1)
                 table_view.setModel(proxy_model)
-                table_view.setSortingEnabled(True)
-                table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
                 # Store data for this tab
                 tab_data = {
@@ -890,93 +866,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
-    def insert_row(self):
-        current_tab_index = self.tab_widget.currentIndex()
-        if current_tab_index < 0:
-            self.show_error_message("No file is open to insert a row.")
-            return
-
-        table_view = self.tab_widget.widget(current_tab_index)
-        proxy_model = table_view.model()
-        source_model = proxy_model.sourceModel()
-
-        selection_model = table_view.selectionModel()
-        selected_proxy_rows = selection_model.selectedRows()
-
-        # If rows are selected, insert above the first selected row.
-        # Otherwise, append to the end of the table.
-        if selected_proxy_rows:
-            # Get the first selected row in the proxy model (view)
-            first_selected_proxy_row = selected_proxy_rows[0].row()
-            # Map the view index to the source model index
-            source_index = proxy_model.mapToSource(proxy_model.index(first_selected_proxy_row, 0))
-            insert_position = source_index.row()
-        else:
-            # If no selection, append to the end of the source model
-            insert_position = source_model.rowCount()
-
-        source_model.insertRows(insert_position, 1)
-
-    def delete_row(self):
-        current_tab_index = self.tab_widget.currentIndex()
-        if current_tab_index < 0:
-            self.show_error_message("No file is open to delete rows from.")
-            return
-
-        table_view = self.tab_widget.widget(current_tab_index)
-        proxy_model = table_view.model()
-        if not proxy_model:
-            return
-
-        source_model = proxy_model.sourceModel()
-        selection_model = table_view.selectionModel()
-
-        # Get selected rows from the view (which are proxy indices)
-        selected_proxy_indexes = selection_model.selectedRows()
-        if not selected_proxy_indexes:
-            self.show_error_message("Please select one or more rows to delete.")
-            return
-
-        # Map proxy indices to source indices before performing deletion
-        source_indexes = [proxy_model.mapToSource(index) for index in selected_proxy_indexes]
-
-        # Get unique source row numbers to avoid deleting the same row multiple times
-        # and sort them in descending order to prevent index shifting issues during deletion
-        source_rows_to_delete = sorted(list(set(index.row() for index in source_indexes)), reverse=True)
-
-        for row in source_rows_to_delete:
-            source_model.removeRows(row, 1)
-
     def closeEvent(self, event):
         QApplication.quit()
-
-    def save_file_as(self):
-        current_tab_index = self.tab_widget.currentIndex()
-        if current_tab_index < 0:
-            self.show_error_message("No file is open to save.")
-            return
-
-        # Get the DataFrame from the source model
-        proxy_model = self.tab_widget.widget(current_tab_index).model()
-        source_model = proxy_model.sourceModel()
-        df_to_save = source_model._data
-
-        # Open file dialog to get save path
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save CSV As...",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
-        )
-
-        if not file_path:
-            return # User cancelled
-
-        try:
-            df_to_save.to_csv(file_path, index=False)
-            self.statusBar().showMessage(f"File saved successfully to {file_path}", 5000)
-        except Exception as e:
-            self.show_error_message(f"Error saving file: {e}")
 
 
 if __name__ == "__main__":

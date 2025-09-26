@@ -77,7 +77,6 @@ def generate_queries(table_name: str) -> str:
 
         for template in group['templates']:
             # Only format the table_name, leaving other placeholders untouched
-            # This uses a custom "safe" format to avoid errors on unused placeholders
             final_script_parts.append(template.replace("{table_name}", table_name))
 
     return "\n".join(final_script_parts)
