@@ -37,27 +37,6 @@ class KeyDetectorOptionsDialog(QDialog):
         return {}
 
 
-class KeyDetectorReportDialog(QDialog):
-    def __init__(self, result_data: dict, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Primary Key Candidate Report")
-        self.setGeometry(150, 150, 800, 600)
-        self.layout = QVBoxLayout(self)
-
-        total_rows = result_data.get("total_rows", "N/A")
-        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
-        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
-        self.layout.addWidget(self.summary_label)
-
-        self.table_view = QTableView()
-        candidates = result_data.get("candidates", [])
-        # The model expects a list of dicts, so this is correct
-        self.model = DictListModel(candidates)
-        self.table_view.setModel(self.model)
-        self.table_view.resizeColumnsToContents()
-        self.layout.addWidget(self.table_view)
-
-
 class QueryReportDialog(QDialog):
     def __init__(self, query_string: str, parent=None):
         super().__init__(parent)
@@ -86,6 +65,27 @@ class QueryReportDialog(QDialog):
         clipboard.setText(self.text_edit.toPlainText())
         if self.parent() and hasattr(self.parent(), 'statusBar'):
             self.parent().statusBar().showMessage("Queries copied to clipboard!", 3000)
+
+
+class KeyDetectorReportDialog(QDialog):
+    def __init__(self, result_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Primary Key Candidate Report")
+        self.setGeometry(150, 150, 800, 600)
+        self.layout = QVBoxLayout(self)
+
+        total_rows = result_data.get("total_rows", "N/A")
+        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
+        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
+        self.layout.addWidget(self.summary_label)
+
+        self.table_view = QTableView()
+        candidates = result_data.get("candidates", [])
+        # The model expects a list of dicts, so this is correct
+        self.model = DictListModel(candidates)
+        self.table_view.setModel(self.model)
+        self.table_view.resizeColumnsToContents()
+        self.layout.addWidget(self.table_view)
 
 
 class GrainFinderDialog(QDialog):
