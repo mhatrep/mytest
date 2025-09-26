@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QGroupBox, QScrollArea)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 from reporter import generate_recommendations
@@ -58,122 +58,6 @@ class KeyDetectorReportDialog(QDialog):
         self.layout.addWidget(self.table_view)
 
 
-class QueryGeneratorOptionsDialog(QDialog):
-    def __init__(self, columns: list, table_name: str = "your_table_name", parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Generate SQL Queries")
-        self.setGeometry(200, 200, 600, 700) # Set a larger default size
-        self.layout = QVBoxLayout(self)
-        self.columns = columns
-
-        # --- Top section for table name ---
-        form_layout = QFormLayout()
-        self.table_name_input = QLineEdit(table_name)
-        form_layout.addRow("Table/View Name:", self.table_name_input)
-        self.layout.addLayout(form_layout)
-
-        # --- Main Tab Widget for organization ---
-        self.tabs = QTabWidget()
-
-        # --- Table-Level Queries Tab ---
-        table_tab = QWidget()
-        table_tab_layout = QVBoxLayout(table_tab)
-
-        basic_group = QGroupBox("Basic Exploration")
-        basic_layout = QVBoxLayout()
-        self.table_query_checkboxes = {
-            "view_all": QCheckBox("View all rows (SELECT *)"),
-            "count_total": QCheckBox("Count total rows"),
-            "preview_sample": QCheckBox("Preview sample rows (LIMIT 10)"),
-        }
-        for chk in self.table_query_checkboxes.values():
-            chk.setChecked(True)
-            basic_layout.addWidget(chk)
-        basic_group.setLayout(basic_layout)
-        table_tab_layout.addWidget(basic_group)
-
-        sampling_group = QGroupBox("Sampling & Debugging")
-        sampling_layout = QVBoxLayout()
-        self.table_query_checkboxes.update({
-            "random_sample": QCheckBox("Random sample (ORDER BY RANDOM())")
-        })
-        sampling_layout.addWidget(self.table_query_checkboxes["random_sample"])
-        sampling_group.setLayout(sampling_layout)
-        table_tab_layout.addWidget(sampling_group)
-        table_tab_layout.addStretch()
-        self.tabs.addTab(table_tab, "Table-Level")
-
-
-        # --- Column-Level Queries Tab ---
-        column_tab = QWidget()
-        column_tab_layout = QVBoxLayout(column_tab)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_content_widget = QWidget()
-        self.column_layouts = QVBoxLayout(scroll_content_widget)
-        self.column_checkboxes = {}
-
-        for col in self.columns:
-            col_group = QGroupBox(f"Column: {col}")
-            col_layout = QVBoxLayout()
-            self.column_checkboxes[col] = {
-                "unique_values": QCheckBox("Unique values in a column"),
-                "count_distinct": QCheckBox("Count distinct values"),
-                "check_nulls": QCheckBox("Check nulls in a column"),
-                "check_blanks": QCheckBox("Check blank/whitespace values"),
-                "min_max_values": QCheckBox("Min & max values"),
-                "basic_stats": QCheckBox("Basic stats (numeric)"),
-                "value_frequency": QCheckBox("Value frequency distribution"),
-                "duplicate_check": QCheckBox("Duplicate value check"),
-                "top_n_by_column": QCheckBox("Top N rows by this column")
-            }
-            for chk in self.column_checkboxes[col].values():
-                col_layout.addWidget(chk)
-            col_group.setLayout(col_layout)
-            self.column_layouts.addWidget(col_group)
-
-        scroll_area.setWidget(scroll_content_widget)
-        column_tab_layout.addWidget(scroll_area)
-        self.tabs.addTab(column_tab, "Column-Level")
-
-        self.layout.addWidget(self.tabs)
-
-        # --- Dialog buttons ---
-        button_layout = QHBoxLayout()
-        self.ok_button = QPushButton("Generate Queries")
-        self.ok_button.clicked.connect(self.accept)
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.reject)
-        button_layout.addStretch()
-        button_layout.addWidget(self.ok_button)
-        button_layout.addWidget(self.cancel_button)
-        self.layout.addLayout(button_layout)
-
-    def get_options(self):
-        options = {
-            "table_name": self.table_name_input.text(),
-            "selected_queries": {
-                "table_level": [],
-                "column_level": {}
-            },
-            "all_columns": self.columns
-        }
-
-        for key, chk in self.table_query_checkboxes.items():
-            if chk.isChecked():
-                options["selected_queries"]["table_level"].append(key)
-
-        for col_name, checkboxes in self.column_checkboxes.items():
-            selected_for_col = []
-            for query_key, chk in checkboxes.items():
-                if chk.isChecked():
-                    selected_for_col.append(query_key)
-            if selected_for_col:
-                options["selected_queries"]["column_level"][col_name] = selected_for_col
-
-        return options
-
-
 class QueryReportDialog(QDialog):
     def __init__(self, query_string: str, parent=None):
         super().__init__(parent)
@@ -200,8 +84,7 @@ class QueryReportDialog(QDialog):
     def copy_to_clipboard(self):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.text_edit.toPlainText())
-        # Optional: Add feedback to user, e.g. via status bar
-        if self.parent():
+        if self.parent() and hasattr(self.parent(), 'statusBar'):
             self.parent().statusBar().showMessage("Queries copied to clipboard!", 3000)
 
 
@@ -574,7 +457,7 @@ class MainWindow(QMainWindow):
         tools_menu.addSeparator()
 
         generate_queries_action = QAction("Generate SQL Queries...", self)
-        generate_queries_action.setStatusTip("Generate common SQL queries for the loaded data")
+        generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
         generate_queries_action.triggered.connect(self.show_query_generator_dialog)
         tools_menu.addAction(generate_queries_action)
 
@@ -968,24 +851,20 @@ class MainWindow(QMainWindow):
         current_tab_data = self.tabs_data[current_index]
         columns = list(current_tab_data['df'].columns)
         file_path = current_tab_data['file_path']
-        table_name = os.path.splitext(os.path.basename(file_path))[0]
+        default_table_name = os.path.splitext(os.path.basename(file_path))[0]
 
-        dialog = QueryGeneratorOptionsDialog(columns, table_name, self)
-        if not dialog.exec():
-            return
+        table_name, ok = QInputDialog.getText(self, "Enter Table Name",
+                                              "Please enter the name of the table:",
+                                              QLineEdit.EchoMode.Normal,
+                                              default_table_name)
 
-        options = dialog.get_options()
+        if not ok or not table_name.strip():
+            return # User cancelled or entered an empty/whitespace name
 
         try:
-            query_string = query_generator.generate_queries(
-                table_name=options['table_name'],
-                selected_queries=options['selected_queries'],
-                all_columns=options['all_columns']
-            )
-
+            query_string = query_generator.generate_queries(table_name.strip(), columns)
             report_dialog = QueryReportDialog(query_string, self)
             report_dialog.exec()
-
         except Exception as e:
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
