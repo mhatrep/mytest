@@ -57,18 +57,3 @@ def run_sweetviz(df: pd.DataFrame) -> str:
 
     os.unlink(filepath)
     return html_content
-
-def run_dataprep(df: pd.DataFrame) -> str:
-    """Generates a report using Dataprep.EDA."""
-    from dataprep.eda import create_report
-
-    report = create_report(df)
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8') as tmp_file:
-        report.save(filename=tmp_file.name)
-        filepath = tmp_file.name
-
-    with open(filepath, 'r', encoding='utf-8') as f:
-        html_content = f.read()
-
-    os.unlink(filepath)
-    return html_content

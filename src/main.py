@@ -5,6 +5,7 @@ import webbrowser
 import tempfile
 import subprocess
 import traceback
+from functools import partial
 from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal, QAbstractTableModel
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
@@ -13,6 +14,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
+import qt_material
 from reporter import generate_recommendations
 import profilers
 import exporter
@@ -368,8 +370,7 @@ class ReportOptionsDialog(QDialog):
             "Data Modeling Report",
             "csvkit (raw stats)",
             "YData-Profiling",
-            "Sweetviz",
-            "Dataprep.EDA"
+            "Sweetviz"
         ])
         self.layout.addRow("Select Profiler:", self.profiler_combo)
 
@@ -416,15 +417,25 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("&File")
         data_menu = menu_bar.addMenu("&Data")
         tools_menu = menu_bar.addMenu("&Tools")
+        view_menu = menu_bar.addMenu("&View")
+
+        # Add themes to the View menu
+        themes_menu = view_menu.addMenu("Themes")
+        for theme in qt_material.list_themes():
+            action = QAction(theme.replace('.xml', '').replace('_', ' ').title(), self)
+            action.triggered.connect(partial(self.apply_theme, theme))
+            themes_menu.addAction(action)
 
         analysis_menu = data_menu.addMenu("Analyze")
 
-        detect_keys_action = QAction("Detect Keys...", self)
+        style = self.style()
+
+        detect_keys_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView), "Detect Keys...", self)
         detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
         detect_keys_action.triggered.connect(self.show_key_detector_dialog)
         analysis_menu.addAction(detect_keys_action)
 
-        open_action = QAction("Open", self)
+        open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
         open_action.setStatusTip("Open a CSV file")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
@@ -434,29 +445,28 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        self.report_action = QAction("Generate Report", self)
+        self.report_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Generate Report", self)
         self.report_action.setStatusTip("Generate a report from the data")
         self.report_action.triggered.connect(self.show_report_dialog)
         tools_menu.addAction(self.report_action)
 
-        export_unique_action = QAction("Export Unique Values", self)
+        export_unique_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Export Unique Values", self)
         export_unique_action.setStatusTip("Export unique values for each column to text files")
         export_unique_action.triggered.connect(self.show_export_unique_dialog)
         tools_menu.addAction(export_unique_action)
 
-        grain_finder_action = QAction("Find Data Grain", self)
+        grain_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Find Data Grain", self)
         grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
         grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
         tools_menu.addAction(grain_finder_action)
 
-        hierarchy_finder_action = QAction("Find Hierarchies", self)
+        hierarchy_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowUp), "Find Hierarchies", self)
         hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
         hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
         tools_menu.addAction(hierarchy_finder_action)
 
         tools_menu.addSeparator()
 
-        style = self.style()
         generate_queries_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView), "Generate SQL Queries...", self)
         generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
         generate_queries_action.triggered.connect(self.show_query_generator_dialog)
@@ -585,8 +595,6 @@ class MainWindow(QMainWindow):
             return profilers.run_ydata_profiling(df), ".html"
         elif profiler_name == "Sweetviz":
             return profilers.run_sweetviz(df), ".html"
-        elif profiler_name == "Dataprep.EDA":
-            return profilers.run_dataprep(df), ".html"
 
         raise NotImplementedError(f"Profiler '{profiler_name}' is not implemented yet.")
 
@@ -867,12 +875,20 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
+    def apply_theme(self, theme_file):
+        try:
+            qt_material.apply_stylesheet(app, theme=theme_file)
+            self.statusBar().showMessage(f"Theme '{theme_file}' applied.", 3000)
+        except Exception as e:
+            self.show_error_message(f"Could not apply theme: {e}")
+
     def closeEvent(self, event):
         QApplication.quit()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    qt_material.apply_stylesheet(app, theme='dark_blue.xml')
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
