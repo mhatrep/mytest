@@ -22,68 +22,6 @@ import key_detector
 import query_generator
 
 
-DARK_THEME_QSS = """
-    QWidget {
-        background-color: #2b2b2b;
-        color: #f0f0f0;
-        font-family: "Segoe UI", "Cantarell", "sans-serif";
-    }
-    QMainWindow {
-        background-color: #3c3c3c;
-    }
-    QTableView {
-        background-color: #3c3c3c;
-        border: 1px solid #444;
-        gridline-color: #444;
-    }
-    QHeaderView::section {
-        background-color: #4a4a4a;
-        color: #f0f0f0;
-        padding: 4px;
-        border: 1px solid #666;
-    }
-    QPushButton {
-        background-color: #5a5a5a;
-        border: 1px solid #666;
-        padding: 5px;
-        border-radius: 2px;
-    }
-    QPushButton:hover {
-        background-color: #6a6a6a;
-    }
-    QPushButton:pressed {
-        background-color: #4a4a4a;
-    }
-    QLineEdit, QComboBox {
-        background-color: #3c3c3c;
-        border: 1px solid #666;
-        padding: 5px;
-        border-radius: 2px;
-    }
-    QMenuBar {
-        background-color: #4a4a4a;
-        color: #f0f0f0;
-    }
-    QMenuBar::item:selected {
-        background-color: #5a5a5a;
-    }
-    QMenu {
-        background-color: #4a4a4a;
-        border: 1px solid #666;
-    }
-    QMenu::item:selected {
-        background-color: #5a5a5a;
-    }
-    QToolBar {
-        background-color: #4a4a4a;
-        border: none;
-    }
-    QStatusBar {
-        color: #f0f0f0;
-    }
-"""
-
-
 class KeyDetectorOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -97,6 +35,27 @@ class KeyDetectorOptionsDialog(QDialog):
     def get_options(self):
         # To be expanded in later phases
         return {}
+
+
+class KeyDetectorReportDialog(QDialog):
+    def __init__(self, result_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Primary Key Candidate Report")
+        self.setGeometry(150, 150, 800, 600)
+        self.layout = QVBoxLayout(self)
+
+        total_rows = result_data.get("total_rows", "N/A")
+        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
+        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
+        self.layout.addWidget(self.summary_label)
+
+        self.table_view = QTableView()
+        candidates = result_data.get("candidates", [])
+        # The model expects a list of dicts, so this is correct
+        self.model = DictListModel(candidates)
+        self.table_view.setModel(self.model)
+        self.table_view.resizeColumnsToContents()
+        self.layout.addWidget(self.table_view)
 
 
 class QueryReportDialog(QDialog):
@@ -127,27 +86,6 @@ class QueryReportDialog(QDialog):
         clipboard.setText(self.text_edit.toPlainText())
         if self.parent() and hasattr(self.parent(), 'statusBar'):
             self.parent().statusBar().showMessage("Queries copied to clipboard!", 3000)
-
-
-class KeyDetectorReportDialog(QDialog):
-    def __init__(self, result_data: dict, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Primary Key Candidate Report")
-        self.setGeometry(150, 150, 800, 600)
-        self.layout = QVBoxLayout(self)
-
-        total_rows = result_data.get("total_rows", "N/A")
-        self.summary_label = QLabel(f"<b>Total Rows Scanned:</b> {total_rows}")
-        self.summary_label.setTextFormat(Qt.TextFormat.RichText)
-        self.layout.addWidget(self.summary_label)
-
-        self.table_view = QTableView()
-        candidates = result_data.get("candidates", [])
-        # The model expects a list of dicts, so this is correct
-        self.model = DictListModel(candidates)
-        self.table_view.setModel(self.model)
-        self.table_view.resizeColumnsToContents()
-        self.layout.addWidget(self.table_view)
 
 
 class GrainFinderDialog(QDialog):
@@ -462,27 +400,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.layout = QVBoxLayout(main_widget)
 
-        # --- Filter Layout ---
-        filter_layout = QHBoxLayout()
-        self.column_filter_combo = QComboBox()
-        self.column_filter_combo.setMinimumWidth(150)
+        # Filter input
         self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("Filter data...")
-
-        filter_layout.addWidget(QLabel("Filter by:"))
-        filter_layout.addWidget(self.column_filter_combo)
-        filter_layout.addWidget(self.filter_input)
-        self.layout.addLayout(filter_layout)
-
-        # Connect signals for filtering
+        self.filter_input.setPlaceholderText("Filter data in current tab...")
         self.filter_input.textChanged.connect(self.filter_data)
-        self.column_filter_combo.currentIndexChanged.connect(self.filter_data)
+        self.layout.addWidget(self.filter_input)
 
         # Tab widget for multiple files
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        self.tab_widget.currentChanged.connect(self.update_column_filter_combo)
         self.layout.addWidget(self.tab_widget)
 
         menu_bar = self.menuBar()
@@ -492,45 +419,44 @@ class MainWindow(QMainWindow):
 
         analysis_menu = data_menu.addMenu("Analyze")
 
-        style = self.style()
-
-        detect_keys_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView), "Detect Keys...", self)
+        detect_keys_action = QAction("Detect Keys...", self)
         detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
         detect_keys_action.triggered.connect(self.show_key_detector_dialog)
         analysis_menu.addAction(detect_keys_action)
 
-        open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
+        open_action = QAction("Open", self)
         open_action.setStatusTip("Open a CSV file")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
-        exit_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton), "Exit", self)
+        exit_action = QAction("Exit", self)
         exit_action.setStatusTip("Exit the application")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        self.report_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Generate Report", self)
+        self.report_action = QAction("Generate Report", self)
         self.report_action.setStatusTip("Generate a report from the data")
         self.report_action.triggered.connect(self.show_report_dialog)
         tools_menu.addAction(self.report_action)
 
-        export_unique_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowDown), "Export Unique Values", self)
+        export_unique_action = QAction("Export Unique Values", self)
         export_unique_action.setStatusTip("Export unique values for each column to text files")
         export_unique_action.triggered.connect(self.show_export_unique_dialog)
         tools_menu.addAction(export_unique_action)
 
-        grain_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton), "Find Data Grain", self)
+        grain_finder_action = QAction("Find Data Grain", self)
         grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
         grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
         tools_menu.addAction(grain_finder_action)
 
-        hierarchy_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton), "Find Hierarchies", self)
+        hierarchy_finder_action = QAction("Find Hierarchies", self)
         hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
         hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
         tools_menu.addAction(hierarchy_finder_action)
 
         tools_menu.addSeparator()
 
+        style = self.style()
         generate_queries_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView), "Generate SQL Queries...", self)
         generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
         generate_queries_action.triggered.connect(self.show_query_generator_dialog)
@@ -601,36 +527,13 @@ class MainWindow(QMainWindow):
                 self.show_error_message(f"Error loading file {file_path}:\n{e}")
                 continue # Continue to next file
 
-    def filter_data(self, text=None):
+    def filter_data(self, text):
         current_index = self.tab_widget.currentIndex()
-        if current_index < 0:
+        if current_index < 0 or current_index >= len(self.tabs_data):
             return
 
         proxy_model = self.tabs_data[current_index]['proxy_model']
-        filter_text = self.filter_input.text()
-
-        # Set the filter column
-        column_index = self.column_filter_combo.currentIndex()
-        if self.column_filter_combo.itemText(column_index) == "All Columns":
-            proxy_model.setFilterKeyColumn(-1)  # -1 means all columns
-        else:
-            # Adjust for "All Columns" at index 0
-            proxy_model.setFilterKeyColumn(column_index - 1)
-
-        # Apply the filter
-        proxy_model.setFilterRegularExpression(filter_text)
-
-    def update_column_filter_combo(self, index):
-        self.column_filter_combo.clear()
-
-        if index < 0:
-            return
-
-        current_tab_data = self.tabs_data[index]
-        df = current_tab_data['df']
-
-        self.column_filter_combo.addItem("All Columns")
-        self.column_filter_combo.addItems(df.columns)
+        proxy_model.setFilterRegularExpression(text)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -970,7 +873,6 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_THEME_QSS)
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
