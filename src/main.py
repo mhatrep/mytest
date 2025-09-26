@@ -844,14 +844,14 @@ class MainWindow(QMainWindow):
 
     def show_query_generator_dialog(self):
         current_index = self.tab_widget.currentIndex()
-        if current_index < 0:
-            self.show_error_message("Please open a file first.")
-            return
+        columns = None
+        default_table_name = "your_table_name"
 
-        current_tab_data = self.tabs_data[current_index]
-        columns = list(current_tab_data['df'].columns)
-        file_path = current_tab_data['file_path']
-        default_table_name = os.path.splitext(os.path.basename(file_path))[0]
+        if current_index >= 0:
+            current_tab_data = self.tabs_data[current_index]
+            columns = list(current_tab_data['df'].columns)
+            file_path = current_tab_data['file_path']
+            default_table_name = os.path.splitext(os.path.basename(file_path))[0]
 
         table_name, ok = QInputDialog.getText(self, "Enter Table Name",
                                               "Please enter the name of the table:",
@@ -859,9 +859,10 @@ class MainWindow(QMainWindow):
                                               default_table_name)
 
         if not ok or not table_name.strip():
-            return # User cancelled or entered an empty/whitespace name
+            return  # User cancelled or entered an empty/whitespace name
 
         try:
+            # The 'columns' variable will be either a list of columns or None
             query_string = query_generator.generate_queries(table_name.strip(), columns)
             report_dialog = QueryReportDialog(query_string, self)
             report_dialog.exec()

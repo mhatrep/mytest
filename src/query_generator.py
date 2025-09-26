@@ -30,13 +30,17 @@ QUERY_TEMPLATES = {
 }
 
 
-def generate_queries(table_name: str, columns: list) -> str:
+from typing import List, Optional
+
+
+def generate_queries(table_name: str, columns: Optional[List[str]] = None) -> str:
     """
     Generates a comprehensive string of SQL queries for a given table and columns.
 
     Args:
         table_name: The name of the table to query.
-        columns: A list of all available column names in the table.
+        columns: An optional list of column names. If not provided, only
+                 table-level queries are generated.
 
     Returns:
         A string containing all the generated SQL queries, one per line.
@@ -50,14 +54,15 @@ def generate_queries(table_name: str, columns: list) -> str:
     for query_template in QUERY_TEMPLATES["table_level"]:
         output_queries.append(query_template.format(table_name=table_name))
 
-    # Generate column-level queries for each column
-    for col_name in columns:
-        for query_template in QUERY_TEMPLATES["column_level"]:
-            # Basic check to avoid formatting comment lines that don't have placeholders
-            if "{" in query_template:
-                query = query_template.format(table_name=table_name, column_name=f'"{col_name}"')
-            else:
-                query = query_template
-            output_queries.append(query)
+    # Generate column-level queries only if columns are provided
+    if columns:
+        for col_name in columns:
+            for query_template in QUERY_TEMPLATES["column_level"]:
+                # Basic check to avoid formatting comment lines that don't have placeholders
+                if "{" in query_template:
+                    query = query_template.format(table_name=table_name, column_name=f'"{col_name}"')
+                else:
+                    query = query_template
+                output_queries.append(query)
 
     return "\n".join(output_queries)
