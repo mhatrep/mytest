@@ -844,13 +844,10 @@ class MainWindow(QMainWindow):
 
     def show_query_generator_dialog(self):
         current_index = self.tab_widget.currentIndex()
-        columns = None
         default_table_name = "your_table_name"
 
         if current_index >= 0:
-            current_tab_data = self.tabs_data[current_index]
-            columns = list(current_tab_data['df'].columns)
-            file_path = current_tab_data['file_path']
+            file_path = self.tabs_data[current_index]['file_path']
             default_table_name = os.path.splitext(os.path.basename(file_path))[0]
 
         table_name, ok = QInputDialog.getText(self, "Enter Table Name",
@@ -862,8 +859,8 @@ class MainWindow(QMainWindow):
             return  # User cancelled or entered an empty/whitespace name
 
         try:
-            # The 'columns' variable will be either a list of columns or None
-            query_string = query_generator.generate_queries(table_name.strip(), columns)
+            # Call the simplified query generator
+            query_string = query_generator.generate_queries(table_name.strip())
             report_dialog = QueryReportDialog(query_string, self)
             report_dialog.exec()
         except Exception as e:
