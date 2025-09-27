@@ -514,6 +514,7 @@ class MainWindow(QMainWindow):
                     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
                     proxy_model.setFilterKeyColumn(-1)
                     table_view.setModel(proxy_model)
+                    table_view.doubleClicked.connect(self.on_cell_double_clicked)
 
                     tab_data = {
                         'type': 'csv',
@@ -585,6 +586,14 @@ class MainWindow(QMainWindow):
         self.hierarchy_finder_action.setEnabled(is_csv)
         self.generate_queries_action.setEnabled(True)
 
+    def on_cell_double_clicked(self, index):
+        if not index.isValid():
+            return
+        cell_text = index.model().data(index, Qt.ItemDataRole.DisplayRole)
+        if cell_text:
+            self.filter_input.setText(cell_text)
+            self.filter_input.setFocus()
+
     def filter_data(self, text):
         current_index = self.tab_widget.currentIndex()
         if current_index < 0 or current_index >= len(self.tabs_data):
@@ -594,6 +603,16 @@ class MainWindow(QMainWindow):
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
             proxy_model.setFilterRegularExpression(text)
+        elif tab_data.get('type') == 'sql':
+            editor = tab_data['widget']
+            if text:
+                if not editor.findFirst(text, False, False, False, True):
+                    # If not found from the beginning, try from the current position.
+                    # This is a common behavior for search boxes.
+                    editor.findFirst(text, False, False, False, True, True, 0, 0)
+            else:
+                # Clear selection if the search box is empty
+                editor.setCursorPosition(0, 0)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()
