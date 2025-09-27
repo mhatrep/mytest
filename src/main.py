@@ -438,15 +438,7 @@ class MainWindow(QMainWindow):
         tools_menu = menu_bar.addMenu("&Tools")
         view_menu = menu_bar.addMenu("&View")
 
-        # Add theme switching actions to the View menu
-        view_menu.addSeparator()
-        light_theme_action = QAction("Light Theme", self)
-        light_theme_action.triggered.connect(partial(self.apply_theme, 'light_blue.xml'))
-        view_menu.addAction(light_theme_action)
-
-        dark_theme_action = QAction("Dark Theme", self)
-        dark_theme_action.triggered.connect(partial(self.apply_theme, 'dark_blue.xml'))
-        view_menu.addAction(dark_theme_action)
+        # The View menu is now empty, but we can leave it for future additions.
 
         analysis_menu = data_menu.addMenu("Analyze")
 
@@ -897,20 +889,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
-    def apply_theme(self, theme_file):
-        try:
-            qt_material.apply_stylesheet(app, theme=theme_file)
-            self.statusBar().showMessage(f"Theme '{theme_file}' applied.", 3000)
-        except Exception as e:
-            self.show_error_message(f"Could not apply theme: {e}")
-
     def closeEvent(self, event):
         QApplication.quit()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    qt_material.apply_stylesheet(app, theme='dark_blue.xml')
+    # Custom high-contrast theme
+    theme = {
+        'primaryColor': '#009688',      # Teal
+        'primaryLightColor': '#4DB6AC',
+        'secondaryColor': '#FFFFFF',    # White
+        'secondaryLightColor': '#F5F5F5',
+        'secondaryDarkColor': '#E0E0E0',
+        'primaryTextColor': '#FFFFFF',
+        'secondaryTextColor': '#000000', # Black
+    }
+    qt_material.apply_stylesheet(app, theme=theme, invert_secondary=True)
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
