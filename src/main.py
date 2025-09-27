@@ -895,8 +895,8 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Custom high-contrast theme
-    theme = {
+    # Use a light base theme and override colors for high contrast
+    extra = {
         'primaryColor': '#009688',      # Teal
         'primaryLightColor': '#4DB6AC',
         'secondaryColor': '#FFFFFF',    # White
@@ -905,7 +905,7 @@ if __name__ == "__main__":
         'primaryTextColor': '#FFFFFF',
         'secondaryTextColor': '#000000', # Black
     }
-    qt_material.apply_stylesheet(app, theme=theme)
+    qt_material.apply_stylesheet(app, theme='light_blue.xml', extra=extra)
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
