@@ -5,7 +5,9 @@ import webbrowser
 import tempfile
 import subprocess
 import traceback
-from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal, QAbstractTableModel, QTimer
+from PyQt6.QtCore import (QSortFilterProxyModel, Qt, QObject, QThread,
+                            pyqtSignal, QAbstractTableModel, QTimer, pyqtSlot)
+import sip
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
@@ -28,53 +30,53 @@ class HighlightWorker(QObject):
     A worker that finds all occurrences of a text string in a document
     in a background thread to avoid freezing the UI.
     """
-    finished = pyqtSignal(list)
+    result = pyqtSignal(list)
+    finished = pyqtSignal()
 
     def __init__(self, text_to_find, document_text, whole_word):
         super().__init__()
         self.text_to_find = text_to_find
         self.document_text = document_text
         self.whole_word = whole_word
-        self._is_stopped = False
+        self.request_abort = False
 
-    def stop(self):
-        """Signals the worker to stop searching."""
-        self._is_stopped = True
-
+    @pyqtSlot()
     def run(self):
         """
         Performs the search and emits a list of (start_pos, length) tuples.
+        This method runs in a background thread.
         """
-        if not self.text_to_find or len(self.text_to_find) < 2:
-            self.finished.emit([])
-            return
+        try:
+            if not self.text_to_find or len(self.text_to_find) < 2:
+                self.result.emit([])
+                return
 
-        matches = []
-        # Perform a case-insensitive search
-        search_text = self.text_to_find.lower()
-        doc_text = self.document_text.lower()
-        search_text_len = len(search_text)
-        doc_len = len(doc_text)
+            matches = []
+            search_text = self.text_to_find.lower()
+            doc_text = self.document_text.lower()
+            search_text_len = len(search_text)
+            doc_len = len(doc_text)
 
-        current_pos = 0
-        while not self._is_stopped:
-            pos = doc_text.find(search_text, current_pos)
-            if pos == -1:
-                break # No more matches
+            current_pos = 0
+            while not self.request_abort:
+                pos = doc_text.find(search_text, current_pos)
+                if pos == -1:
+                    break
 
-            # If whole word is required, check the boundaries in the original text.
-            if self.whole_word:
-                is_start_boundary = (pos == 0) or (not self.document_text[pos-1].isalnum())
-                is_end_boundary = (pos + search_text_len >= doc_len) or (not self.document_text[pos + search_text_len].isalnum())
-                if not (is_start_boundary and is_end_boundary):
-                    current_pos = pos + 1 # Move to the next character
-                    continue # This was not a whole word match
+                if self.whole_word:
+                    is_start_boundary = (pos == 0) or (not self.document_text[pos - 1].isalnum())
+                    is_end_boundary = (pos + search_text_len >= doc_len) or (not self.document_text[pos + search_text_len].isalnum())
+                    if not (is_start_boundary and is_end_boundary):
+                        current_pos = pos + 1
+                        continue
 
-            matches.append((pos, search_text_len))
-            current_pos = pos + search_text_len
+                matches.append((pos, search_text_len))
+                current_pos = pos + search_text_len
 
-        if not self._is_stopped:
-            self.finished.emit(matches)
+            if not self.request_abort:
+                self.result.emit(matches)
+        finally:
+            self.finished.emit()
 
 
 class KeyDetectorOptionsDialog(QDialog):
@@ -539,16 +541,28 @@ class MainWindow(QMainWindow):
         self.highlight_worker = None
         self.on_tab_changed(-1)
 
+    def _thread_is_alive(self, t: QThread | None) -> bool:
+        return (
+            t is not None
+            and isinstance(t, QThread)
+            and not sip.isdeleted(t)
+            and t.isRunning()
+        )
+
+    def _on_highlight_finished(self):
+        self.highlight_worker = None
+        self.highlight_thread = None
+
     def trigger_highlighting(self, editor, text, whole_word):
         """
         Manages the background thread for highlighting text.
         Stops any existing search and starts a new one.
         """
-        # Stop any previously running highlight thread
-        if self.highlight_thread and self.highlight_thread.isRunning():
-            self.highlight_worker.stop()
+        # Safely stop any previous run
+        if self._thread_is_alive(self.highlight_thread):
+            self.highlight_worker.request_abort = True
             self.highlight_thread.quit()
-            self.highlight_thread.wait()
+            self.highlight_thread.wait(200)
 
         # If text is too short, just clear existing highlights and stop.
         if not text or len(text) < 2:
@@ -558,18 +572,20 @@ class MainWindow(QMainWindow):
 
         document_text = editor.text()
 
-        self.highlight_thread = QThread()
+        # (Re)create thread & worker
+        self.highlight_thread = QThread(parent=self)
         self.highlight_worker = HighlightWorker(text, document_text, whole_word)
         self.highlight_worker.moveToThread(self.highlight_thread)
 
-        # Use a lambda to pass the editor instance to the slot, ensuring
-        # highlights are applied to the correct editor, even if the user
-        # switches tabs.
-        apply_slot = lambda matches: self._apply_highlights(editor, matches)
-        self.highlight_worker.finished.connect(apply_slot)
-
+        # Wire signals
         self.highlight_thread.started.connect(self.highlight_worker.run)
-        self.highlight_worker.finished.connect(self.highlight_thread.quit)
+        # Use a lambda to ensure we apply highlights to the correct editor,
+        # even if the user has switched tabs.
+        apply_slot = lambda matches: self._apply_highlights(editor, matches)
+        self.highlight_worker.result.connect(apply_slot)
+        self.highlight_worker.finished.connect(self._on_highlight_finished)
+
+        # Ensure clean teardown
         self.highlight_worker.finished.connect(self.highlight_worker.deleteLater)
         self.highlight_thread.finished.connect(self.highlight_thread.deleteLater)
 
@@ -713,14 +729,16 @@ class MainWindow(QMainWindow):
 
         selected_text = editor.selectedText()
 
-        # If the selection is a single "word", update the filter box.
-        # A simple check for spaces is good enough here.
+        # If the selection is a single "word", update the filter box and highlight.
         if selected_text and ' ' not in selected_text and '\n' not in selected_text:
-            # This will trigger the filter_data method, which handles highlighting.
+            # Block signals to prevent filter_data from running redundantly.
+            self.filter_input.blockSignals(True)
             self.filter_input.setText(selected_text)
+            self.filter_input.blockSignals(False)
+            # Directly trigger the highlight with whole_word=True for double-click.
+            self.trigger_highlighting(editor, selected_text, whole_word=True)
         else:
-            # If the user is just selecting a block of text, clear highlights
-            # by triggering a search for an empty string.
+            # If the user is just selecting a block of text, clear highlights.
             self.trigger_highlighting(editor, "", whole_word=False)
 
 
@@ -1076,7 +1094,15 @@ class MainWindow(QMainWindow):
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
     def closeEvent(self, event):
-        QApplication.quit()
+        try:
+            if self._thread_is_alive(self.highlight_thread):
+                self.highlight_worker.request_abort = True
+                self.highlight_thread.quit()
+                self.highlight_thread.wait(300)
+        finally:
+            self.highlight_worker = None
+            self.highlight_thread = None
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":
