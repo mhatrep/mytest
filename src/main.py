@@ -23,6 +23,60 @@ import key_detector
 import query_generator
 
 
+class HighlightWorker(QObject):
+    """
+    A worker that finds all occurrences of a text string in a document
+    in a background thread to avoid freezing the UI.
+    """
+    finished = pyqtSignal(list)
+
+    def __init__(self, text_to_find, document_text, whole_word):
+        super().__init__()
+        self.text_to_find = text_to_find
+        self.document_text = document_text
+        self.whole_word = whole_word
+        self._is_stopped = False
+
+    def stop(self):
+        """Signals the worker to stop searching."""
+        self._is_stopped = True
+
+    def run(self):
+        """
+        Performs the search and emits a list of (start_pos, length) tuples.
+        """
+        if not self.text_to_find or len(self.text_to_find) < 2:
+            self.finished.emit([])
+            return
+
+        matches = []
+        # Perform a case-insensitive search
+        search_text = self.text_to_find.lower()
+        doc_text = self.document_text.lower()
+        search_text_len = len(search_text)
+        doc_len = len(doc_text)
+
+        current_pos = 0
+        while not self._is_stopped:
+            pos = doc_text.find(search_text, current_pos)
+            if pos == -1:
+                break # No more matches
+
+            # If whole word is required, check the boundaries in the original text.
+            if self.whole_word:
+                is_start_boundary = (pos == 0) or (not self.document_text[pos-1].isalnum())
+                is_end_boundary = (pos + search_text_len >= doc_len) or (not self.document_text[pos + search_text_len].isalnum())
+                if not (is_start_boundary and is_end_boundary):
+                    current_pos = pos + 1 # Move to the next character
+                    continue # This was not a whole word match
+
+            matches.append((pos, search_text_len))
+            current_pos = pos + search_text_len
+
+        if not self._is_stopped:
+            self.finished.emit(matches)
+
+
 class KeyDetectorOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -481,7 +535,45 @@ class MainWindow(QMainWindow):
 
         self.thread = None
         self.worker = None
+        self.highlight_thread = None
+        self.highlight_worker = None
         self.on_tab_changed(-1)
+
+    def trigger_highlighting(self, editor, text, whole_word):
+        """
+        Manages the background thread for highlighting text.
+        Stops any existing search and starts a new one.
+        """
+        # Stop any previously running highlight thread
+        if self.highlight_thread and self.highlight_thread.isRunning():
+            self.highlight_worker.stop()
+            self.highlight_thread.quit()
+            self.highlight_thread.wait()
+
+        # If text is too short, just clear existing highlights and stop.
+        if not text or len(text) < 2:
+            if isinstance(editor, QsciScintilla):
+                self._apply_highlights(editor, [])
+            return
+
+        document_text = editor.text()
+
+        self.highlight_thread = QThread()
+        self.highlight_worker = HighlightWorker(text, document_text, whole_word)
+        self.highlight_worker.moveToThread(self.highlight_thread)
+
+        # Use a lambda to pass the editor instance to the slot, ensuring
+        # highlights are applied to the correct editor, even if the user
+        # switches tabs.
+        apply_slot = lambda matches: self._apply_highlights(editor, matches)
+        self.highlight_worker.finished.connect(apply_slot)
+
+        self.highlight_thread.started.connect(self.highlight_worker.run)
+        self.highlight_worker.finished.connect(self.highlight_thread.quit)
+        self.highlight_worker.finished.connect(self.highlight_worker.deleteLater)
+        self.highlight_thread.finished.connect(self.highlight_thread.deleteLater)
+
+        self.highlight_thread.start()
 
     def close_tab(self, index):
         self.tab_widget.removeTab(index)
@@ -593,34 +685,21 @@ class MainWindow(QMainWindow):
         self.hierarchy_finder_action.setEnabled(is_csv)
         self.generate_queries_action.setEnabled(True)
 
-    def _highlight_all_occurrences(self, editor, text, whole_word):
+    def _apply_highlights(self, editor, matches):
+        """
+        Applies the list of found matches as indicators in the editor.
+        This method is designed to be called on the main UI thread.
+        """
         if not isinstance(editor, QsciScintilla) or not hasattr(self, 'word_highlight_indicator'):
             return
 
-        # 1. Clear all existing indicators
+        # Clear all existing indicators first.
         editor.SendScintilla(editor.SCI_SETINDICATORCURRENT, self.word_highlight_indicator)
         editor.SendScintilla(editor.SCI_INDICATORCLEARRANGE, 0, len(editor.text()))
 
-        # 2. If text is empty, we're done.
-        if not text or len(text) < 2:
-            return
-
-        # 3. Save current selection to restore it later
-        line_from, index_from, line_to, index_to = editor.getSelection()
-
-        # 4. Search and highlight all occurrences
-        use_regex = False
-        match_case = True
-        found = editor.findFirst(text, use_regex, match_case, whole_word, False, True, 0, 0)
-        while found:
-            start_pos = editor.SendScintilla(editor.SCI_GETSELECTIONSTART)
-            end_pos = editor.SendScintilla(editor.SCI_GETSELECTIONEND)
-            length = end_pos - start_pos
+        # Apply the new indicators.
+        for start_pos, length in matches:
             editor.SendScintilla(editor.SCI_INDICATORFILLRANGE, start_pos, length)
-            found = editor.findNext()
-
-        # 5. Restore original selection
-        editor.setSelection(line_from, index_from, line_to, index_to)
 
     def __on_sql_selection_changed(self):
         # Use a timer to defer the execution. This prevents crashes that can
@@ -637,14 +716,12 @@ class MainWindow(QMainWindow):
         # If the selection is a single "word", update the filter box.
         # A simple check for spaces is good enough here.
         if selected_text and ' ' not in selected_text and '\n' not in selected_text:
-            # Block signals to prevent the filter_data from running immediately
-            self.filter_input.blockSignals(True)
+            # This will trigger the filter_data method, which handles highlighting.
             self.filter_input.setText(selected_text)
-            self.filter_input.blockSignals(False)
-            self._highlight_all_occurrences(editor, selected_text, whole_word=True)
         else:
-            # If the user is just selecting a block of text, clear highlights.
-            self._highlight_all_occurrences(editor, "", whole_word=False)
+            # If the user is just selecting a block of text, clear highlights
+            # by triggering a search for an empty string.
+            self.trigger_highlighting(editor, "", whole_word=False)
 
 
     def on_cell_double_clicked(self, index):
@@ -666,7 +743,7 @@ class MainWindow(QMainWindow):
             proxy_model.setFilterRegularExpression(text)
         elif tab_data.get('type') == 'sql':
             editor = tab_data['widget']
-            self._highlight_all_occurrences(editor, text, whole_word=False)
+            self.trigger_highlighting(editor, text, whole_word=False)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()
