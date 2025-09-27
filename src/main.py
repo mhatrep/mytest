@@ -11,10 +11,11 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
                              QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont
 from table_model import PandasModel
 from reporter import generate_recommendations
 import profilers
+from PyQt6.Qsci import QsciScintilla, QsciLexerSQL
 import exporter
 import grain_finder
 import hierarchy_finder
@@ -409,6 +410,7 @@ class MainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         self.layout.addWidget(self.tab_widget)
 
         menu_bar = self.menuBar()
@@ -418,13 +420,14 @@ class MainWindow(QMainWindow):
 
         analysis_menu = data_menu.addMenu("Analyze")
 
-        detect_keys_action = QAction("Detect Keys...", self)
-        detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
-        detect_keys_action.triggered.connect(self.show_key_detector_dialog)
-        analysis_menu.addAction(detect_keys_action)
+        style = self.style()
+        self.detect_keys_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView), "Detect Keys...", self)
+        self.detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
+        self.detect_keys_action.triggered.connect(self.show_key_detector_dialog)
+        analysis_menu.addAction(self.detect_keys_action)
 
-        open_action = QAction("Open", self)
-        open_action.setStatusTip("Open a CSV file")
+        open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
+        open_action.setStatusTip("Open a CSV or SQL file")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
@@ -433,44 +436,43 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        self.report_action = QAction("Generate Report", self)
+        self.report_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Generate Report", self)
         self.report_action.setStatusTip("Generate a report from the data")
         self.report_action.triggered.connect(self.show_report_dialog)
         tools_menu.addAction(self.report_action)
 
-        export_unique_action = QAction("Export Unique Values", self)
-        export_unique_action.setStatusTip("Export unique values for each column to text files")
-        export_unique_action.triggered.connect(self.show_export_unique_dialog)
-        tools_menu.addAction(export_unique_action)
+        self.export_unique_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Export Unique Values", self)
+        self.export_unique_action.setStatusTip("Export unique values for each column to text files")
+        self.export_unique_action.triggered.connect(self.show_export_unique_dialog)
+        tools_menu.addAction(self.export_unique_action)
 
-        grain_finder_action = QAction("Find Data Grain", self)
-        grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
-        grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
-        tools_menu.addAction(grain_finder_action)
+        self.grain_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Find Data Grain", self)
+        self.grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
+        self.grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
+        tools_menu.addAction(self.grain_finder_action)
 
-        hierarchy_finder_action = QAction("Find Hierarchies", self)
-        hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
-        hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
-        tools_menu.addAction(hierarchy_finder_action)
+        self.hierarchy_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowUp), "Find Hierarchies", self)
+        self.hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
+        self.hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
+        tools_menu.addAction(self.hierarchy_finder_action)
 
         tools_menu.addSeparator()
 
-        style = self.style()
-        generate_queries_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView), "Generate SQL Queries...", self)
-        generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
-        generate_queries_action.triggered.connect(self.show_query_generator_dialog)
-        tools_menu.addAction(generate_queries_action)
+        self.generate_queries_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView), "Generate SQL Queries...", self)
+        self.generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
+        self.generate_queries_action.triggered.connect(self.show_query_generator_dialog)
+        tools_menu.addAction(self.generate_queries_action)
 
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
-        toolbar.addAction(detect_keys_action)
+        toolbar.addAction(self.detect_keys_action)
         toolbar.addSeparator()
         toolbar.addAction(self.report_action)
-        toolbar.addAction(export_unique_action)
-        toolbar.addAction(grain_finder_action)
-        toolbar.addAction(hierarchy_finder_action)
-        toolbar.addAction(generate_queries_action)
+        toolbar.addAction(self.export_unique_action)
+        toolbar.addAction(self.grain_finder_action)
+        toolbar.addAction(self.hierarchy_finder_action)
+        toolbar.addAction(self.generate_queries_action)
 
         # Status Bar
         self.setStatusBar(QStatusBar(self))
@@ -479,6 +481,7 @@ class MainWindow(QMainWindow):
 
         self.thread = None
         self.worker = None
+        self.on_tab_changed(-1)
 
     def close_tab(self, index):
         self.tab_widget.removeTab(index)
@@ -493,46 +496,102 @@ class MainWindow(QMainWindow):
         msg_box.exec()
 
     def open_file(self):
-        file_paths, _ = QFileDialog.getOpenFileNames(self, "Open CSV(s)", "", "CSV Files (*.csv);;All Files (*)")
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self, "Open File(s)", "", "All Supported Files (*.csv *.sql);;CSV Files (*.csv);;SQL Files (*.sql);;All Files (*)"
+        )
         if not file_paths:
             return
 
         for file_path in file_paths:
             try:
-                df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
-
-                # Create a new tab
-                table_view = QTableView()
-                proxy_model = QSortFilterProxyModel()
-                pandas_model = PandasModel(df)
-                proxy_model.setSourceModel(pandas_model)
-                proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-                proxy_model.setFilterKeyColumn(-1)
-                table_view.setModel(proxy_model)
-
-                # Store data for this tab
-                tab_data = {
-                    'df': df,
-                    'proxy_model': proxy_model,
-                    'file_path': file_path
-                }
-                self.tabs_data.append(tab_data)
-
                 tab_name = os.path.basename(file_path)
-                index = self.tab_widget.addTab(table_view, tab_name)
-                self.tab_widget.setCurrentIndex(index)
+                if file_path.lower().endswith('.csv'):
+                    df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
+                    table_view = QTableView()
+                    proxy_model = QSortFilterProxyModel()
+                    pandas_model = PandasModel(df)
+                    proxy_model.setSourceModel(pandas_model)
+                    proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                    proxy_model.setFilterKeyColumn(-1)
+                    table_view.setModel(proxy_model)
+
+                    tab_data = {
+                        'type': 'csv',
+                        'df': df,
+                        'proxy_model': proxy_model,
+                        'file_path': file_path,
+                        'widget': table_view,
+                    }
+                    self.tabs_data.append(tab_data)
+                    index = self.tab_widget.addTab(table_view, tab_name)
+                    self.tab_widget.setCurrentIndex(index)
+
+                elif file_path.lower().endswith('.sql'):
+                    editor = self.create_sql_editor()
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        editor.setText(f.read())
+
+                    tab_data = {
+                        'type': 'sql',
+                        'file_path': file_path,
+                        'widget': editor,
+                    }
+                    self.tabs_data.append(tab_data)
+                    index = self.tab_widget.addTab(editor, tab_name)
+                    self.tab_widget.setCurrentIndex(index)
 
             except Exception as e:
                 self.show_error_message(f"Error loading file {file_path}:\n{e}")
-                continue # Continue to next file
+                continue
+
+    def create_sql_editor(self):
+        font = QFont()
+        font.setFamily('Courier')
+        font.setFixedPitch(True)
+        font.setPointSize(12)
+
+        editor = QsciScintilla()
+        editor.setUtf8(True)
+        editor.setFont(font)
+        editor.setBraceMatching(QsciScintilla.BraceMatch.SloppyBraceMatch)
+        editor.setIndentationGuides(True)
+        editor.setIndentationsUseTabs(False)
+        editor.setTabWidth(4)
+        editor.setAutoIndent(True)
+
+        fontmetrics = editor.fontMetrics()
+        editor.setMarginWidth(0, fontmetrics.horizontalAdvance('00000') + 6)
+        editor.setMarginLineNumbers(0, True)
+
+        lexer = QsciLexerSQL(editor)
+        lexer.setDefaultFont(font)
+        editor.setLexer(lexer)
+
+        return editor
+
+    def on_tab_changed(self, index):
+        if index < 0 or index >= len(self.tabs_data):
+            is_csv = False
+        else:
+            tab_data = self.tabs_data[index]
+            is_csv = tab_data.get('type') == 'csv'
+
+        self.detect_keys_action.setEnabled(is_csv)
+        self.report_action.setEnabled(is_csv)
+        self.export_unique_action.setEnabled(is_csv)
+        self.grain_finder_action.setEnabled(is_csv)
+        self.hierarchy_finder_action.setEnabled(is_csv)
+        self.generate_queries_action.setEnabled(True)
 
     def filter_data(self, text):
         current_index = self.tab_widget.currentIndex()
         if current_index < 0 or current_index >= len(self.tabs_data):
             return
 
-        proxy_model = self.tabs_data[current_index]['proxy_model']
-        proxy_model.setFilterRegularExpression(text)
+        tab_data = self.tabs_data[current_index]
+        if tab_data.get('type') == 'csv':
+            proxy_model = tab_data['proxy_model']
+            proxy_model.setFilterRegularExpression(text)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()

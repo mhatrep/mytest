@@ -4,3 +4,4 @@ setuptools
 csvkit
 ydata-profiling
 sweetviz
+PyQt6-QScintilla
