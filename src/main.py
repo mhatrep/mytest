@@ -5,7 +5,7 @@ import webbrowser
 import tempfile
 import subprocess
 import traceback
-from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal, QAbstractTableModel
+from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal, QAbstractTableModel, QTimer
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
@@ -593,51 +593,58 @@ class MainWindow(QMainWindow):
         self.hierarchy_finder_action.setEnabled(is_csv)
         self.generate_queries_action.setEnabled(True)
 
-    def __on_sql_selection_changed(self):
-        editor = self.tab_widget.currentWidget()
+    def _highlight_all_occurrences(self, editor, text, whole_word):
         if not isinstance(editor, QsciScintilla) or not hasattr(self, 'word_highlight_indicator'):
             return
 
-        # Disconnect the signal to prevent infinite recursion
-        try:
-            editor.selectionChanged.disconnect(self.__on_sql_selection_changed)
-        except TypeError:
-            # Signal might already be disconnected, which is fine.
-            pass
+        # 1. Clear all existing indicators
+        editor.SendScintilla(editor.SCI_SETINDICATORCURRENT, self.word_highlight_indicator)
+        editor.SendScintilla(editor.SCI_INDICATORCLEARRANGE, 0, len(editor.text()))
 
-        try:
-            # Clear previous indicators for the entire document first.
-            editor.SendScintilla(editor.SCI_SETINDICATORCURRENT, self.word_highlight_indicator)
-            editor.SendScintilla(editor.SCI_INDICATORCLEARRANGE, 0, len(editor.text()))
+        # 2. If text is empty, we're done.
+        if not text or len(text) < 2:
+            return
 
-            selected_text = editor.selectedText()
+        # 3. Save current selection to restore it later
+        line_from, index_from, line_to, index_to = editor.getSelection()
 
-            # We only proceed if there's a selection of more than one character.
-            if not selected_text or len(selected_text) <= 1:
-                return
+        # 4. Search and highlight all occurrences
+        use_regex = False
+        match_case = True
+        found = editor.findFirst(text, use_regex, match_case, whole_word, False, True, 0, 0)
+        while found:
+            start_pos = editor.SendScintilla(editor.SCI_GETSELECTIONSTART)
+            end_pos = editor.SendScintilla(editor.SCI_GETSELECTIONEND)
+            length = end_pos - start_pos
+            editor.SendScintilla(editor.SCI_INDICATORFILLRANGE, start_pos, length)
+            found = editor.findNext()
 
-            # Perform the search, disabling regex to prevent crashes.
-            match_case = True
-            whole_word = True
-            use_regex = False  # CRITICAL FIX: Do not use regex.
+        # 5. Restore original selection
+        editor.setSelection(line_from, index_from, line_to, index_to)
 
-            # findFirst returns a boolean; the match becomes the new selection.
-            found = editor.findFirst(selected_text, use_regex, match_case, whole_word, True, True, 0, 0)
+    def __on_sql_selection_changed(self):
+        # Use a timer to defer the execution. This prevents crashes that can
+        # occur if we run a complex operation directly inside the signal handler.
+        QTimer.singleShot(0, self._perform_selection_highlight)
 
-            while found:
-                # Get the position of the found text (the new selection)
-                start_pos = editor.SendScintilla(editor.SCI_GETSELECTIONSTART)
-                end_pos = editor.SendScintilla(editor.SCI_GETSELECTIONEND)
-                length = end_pos - start_pos
+    def _perform_selection_highlight(self):
+        editor = self.tab_widget.currentWidget()
+        if not isinstance(editor, QsciScintilla):
+            return
 
-                # Apply the indicator to the found range.
-                editor.SendScintilla(editor.SCI_INDICATORFILLRANGE, start_pos, length)
+        selected_text = editor.selectedText()
 
-                # Find the next occurrence.
-                found = editor.findNext()
-        finally:
-            # Always reconnect the signal.
-            editor.selectionChanged.connect(self.__on_sql_selection_changed)
+        # If the selection is a single "word", update the filter box.
+        # A simple check for spaces is good enough here.
+        if selected_text and ' ' not in selected_text and '\n' not in selected_text:
+            # Block signals to prevent the filter_data from running immediately
+            self.filter_input.blockSignals(True)
+            self.filter_input.setText(selected_text)
+            self.filter_input.blockSignals(False)
+            self._highlight_all_occurrences(editor, selected_text, whole_word=True)
+        else:
+            # If the user is just selecting a block of text, clear highlights.
+            self._highlight_all_occurrences(editor, "", whole_word=False)
 
 
     def on_cell_double_clicked(self, index):
@@ -659,14 +666,7 @@ class MainWindow(QMainWindow):
             proxy_model.setFilterRegularExpression(text)
         elif tab_data.get('type') == 'sql':
             editor = tab_data['widget']
-            if text:
-                if not editor.findFirst(text, False, False, False, True):
-                    # If not found from the beginning, try from the current position.
-                    # This is a common behavior for search boxes.
-                    editor.findFirst(text, False, False, False, True, True, 0, 0)
-            else:
-                # Clear selection if the search box is empty
-                editor.setCursorPosition(0, 0)
+            self._highlight_all_occurrences(editor, text, whole_word=False)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()
