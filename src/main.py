@@ -426,10 +426,10 @@ class MainWindow(QMainWindow):
         self.detect_keys_action.triggered.connect(self.show_key_detector_dialog)
         analysis_menu.addAction(self.detect_keys_action)
 
-        open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
-        open_action.setStatusTip("Open a CSV or SQL file")
-        open_action.triggered.connect(self.open_file)
-        file_menu.addAction(open_action)
+        self.open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
+        self.open_action.setStatusTip("Open a CSV or SQL file")
+        self.open_action.triggered.connect(self.open_file)
+        file_menu.addAction(self.open_action)
 
         exit_action = QAction("Exit", self)
         exit_action.setStatusTip("Exit the application")
@@ -465,7 +465,7 @@ class MainWindow(QMainWindow):
 
         toolbar = QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
-        toolbar.addAction(open_action)
+        toolbar.addAction(self.open_action)
         toolbar.addAction(self.detect_keys_action)
         toolbar.addSeparator()
         toolbar.addAction(self.report_action)
@@ -514,7 +514,6 @@ class MainWindow(QMainWindow):
                     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
                     proxy_model.setFilterKeyColumn(-1)
                     table_view.setModel(proxy_model)
-                    table_view.doubleClicked.connect(self.on_cell_double_clicked)
 
                     tab_data = {
                         'type': 'csv',
@@ -586,14 +585,6 @@ class MainWindow(QMainWindow):
         self.hierarchy_finder_action.setEnabled(is_csv)
         self.generate_queries_action.setEnabled(True)
 
-    def on_cell_double_clicked(self, index):
-        if not index.isValid():
-            return
-        cell_text = index.model().data(index, Qt.ItemDataRole.DisplayRole)
-        if cell_text:
-            self.filter_input.setText(cell_text)
-            self.filter_input.setFocus()
-
     def filter_data(self, text):
         current_index = self.tab_widget.currentIndex()
         if current_index < 0 or current_index >= len(self.tabs_data):
@@ -603,16 +594,6 @@ class MainWindow(QMainWindow):
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
             proxy_model.setFilterRegularExpression(text)
-        elif tab_data.get('type') == 'sql':
-            editor = tab_data['widget']
-            if text:
-                if not editor.findFirst(text, False, False, False, True):
-                    # If not found from the beginning, try from the current position.
-                    # This is a common behavior for search boxes.
-                    editor.findFirst(text, False, False, False, True, True, 0, 0)
-            else:
-                # Clear selection if the search box is empty
-                editor.setCursorPosition(0, 0)
 
     def show_report_dialog(self):
         current_index = self.tab_widget.currentIndex()
