@@ -905,7 +905,7 @@ if __name__ == "__main__":
         'primaryTextColor': '#FFFFFF',
         'secondaryTextColor': '#000000', # Black
     }
-    qt_material.apply_stylesheet(app, theme=theme, invert_secondary=True)
+    qt_material.apply_stylesheet(app, theme=theme)
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
