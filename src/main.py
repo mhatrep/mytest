@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle, QDialogButtonBox)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
 import qt_material
@@ -28,11 +28,14 @@ class KeyDetectorOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Detect Keys Options")
-        self.layout = QFormLayout(self)
-        # Options will be added in a later phase
-        self.ok_button = QPushButton("Run Analysis")
-        self.ok_button.clicked.connect(self.accept)
-        self.layout.addRow(self.ok_button)
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(QLabel("No specific options to configure for key detection yet."))
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Run Analysis")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
 
     def get_options(self):
         # To be expanded in later phases
@@ -94,19 +97,23 @@ class GrainFinderDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Find Data Grain Options")
-        self.layout = QFormLayout(self)
+        self.layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
 
         self.normalize_ws_check = QCheckBox("Normalize Whitespace")
         self.normalize_ws_check.setChecked(True)
-        self.layout.addRow("Normalization:", self.normalize_ws_check)
+        form_layout.addRow("Normalization:", self.normalize_ws_check)
 
         self.lowercase_check = QCheckBox("Lowercase Strings")
         self.lowercase_check.setChecked(False)
-        self.layout.addRow("", self.lowercase_check)
+        form_layout.addRow("", self.lowercase_check)
+        self.layout.addLayout(form_layout)
 
-        self.ok_button = QPushButton("Find Grain")
-        self.ok_button.clicked.connect(self.accept)
-        self.layout.addRow(self.ok_button)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Find Grain")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
 
     def get_options(self):
         return {
@@ -216,26 +223,30 @@ class HierarchyOptionsDialog(QDialog):
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Find Hierarchies Options")
-        self.layout = QFormLayout(self)
+        self.layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
 
         self.parent_combo = QComboBox()
         self.parent_combo.addItems(columns)
-        self.layout.addRow("Parent Column:", self.parent_combo)
+        form_layout.addRow("Parent Column:", self.parent_combo)
 
         self.child_combo = QComboBox()
         self.child_combo.addItems(columns)
         # Select second item by default if available
         if len(columns) > 1:
             self.child_combo.setCurrentIndex(1)
-        self.layout.addRow("Child Column:", self.child_combo)
+        form_layout.addRow("Child Column:", self.child_combo)
 
         self.swap_button = QPushButton("Swap")
         self.swap_button.clicked.connect(self.swap_columns)
-        self.layout.addWidget(self.swap_button)
+        form_layout.addWidget(self.swap_button)
+        self.layout.addLayout(form_layout)
 
-        self.ok_button = QPushButton("Find Hierarchies")
-        self.ok_button.clicked.connect(self.accept)
-        self.layout.addRow(self.ok_button)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Find Hierarchies")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
 
     def swap_columns(self):
         parent_index = self.parent_combo.currentIndex()
@@ -308,7 +319,8 @@ class UniqueValuesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Export Unique Values Options")
-        self.layout = QFormLayout(self)
+        self.layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
 
         self.case_sensitive_check = QCheckBox("Case-sensitive")
         self.case_sensitive_check.setChecked(False)
@@ -319,13 +331,16 @@ class UniqueValuesDialog(QDialog):
         self.sort_combo = QComboBox()
         self.sort_combo.addItems(["Alphabetical (A-Z)", "Frequency (High to Low)"])
 
-        self.layout.addRow("Case Sensitivity:", self.case_sensitive_check)
-        self.layout.addRow("Frequency Count:", self.include_frequency_check)
-        self.layout.addRow("Sort Order:", self.sort_combo)
+        form_layout.addRow("Case Sensitivity:", self.case_sensitive_check)
+        form_layout.addRow("Frequency Count:", self.include_frequency_check)
+        form_layout.addRow("Sort Order:", self.sort_combo)
+        self.layout.addLayout(form_layout)
 
-        self.ok_button = QPushButton("Export")
-        self.ok_button.clicked.connect(self.accept)
-        self.layout.addRow(self.ok_button)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Export")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
 
     def get_options(self):
         return {
@@ -363,7 +378,8 @@ class ReportOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Generate Report")
-        self.layout = QFormLayout(self)
+        self.layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
 
         self.profiler_combo = QComboBox()
         self.profiler_combo.addItems([
@@ -372,15 +388,18 @@ class ReportOptionsDialog(QDialog):
             "YData-Profiling",
             "Sweetviz"
         ])
-        self.layout.addRow("Select Profiler:", self.profiler_combo)
+        form_layout.addRow("Select Profiler:", self.profiler_combo)
 
         self.open_after_save_check = QCheckBox("Open file after saving")
         self.open_after_save_check.setChecked(True)
-        self.layout.addRow(self.open_after_save_check)
+        form_layout.addRow(self.open_after_save_check)
+        self.layout.addLayout(form_layout)
 
-        self.ok_button = QPushButton("Generate")
-        self.ok_button.clicked.connect(self.accept)
-        self.layout.addRow(self.ok_button)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Generate")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
 
     def get_options(self):
         return {
@@ -419,21 +438,15 @@ class MainWindow(QMainWindow):
         tools_menu = menu_bar.addMenu("&Tools")
         view_menu = menu_bar.addMenu("&View")
 
-        # Add themes to the View menu
-        themes_menu = view_menu.addMenu("Themes")
-        # Pre-selected list of popular themes
-        popular_themes = [
-            'dark_blue.xml',
-            'dark_cyan.xml',
-            'dark_teal.xml',
-            'light_blue.xml',
-            'light_cyan.xml',
-            'light_teal.xml'
-        ]
-        for theme in popular_themes:
-            action = QAction(theme.replace('.xml', '').replace('_', ' ').title(), self)
-            action.triggered.connect(partial(self.apply_theme, theme))
-            themes_menu.addAction(action)
+        # Add theme switching actions to the View menu
+        view_menu.addSeparator()
+        light_theme_action = QAction("Light Theme", self)
+        light_theme_action.triggered.connect(partial(self.apply_theme, 'light_blue.xml'))
+        view_menu.addAction(light_theme_action)
+
+        dark_theme_action = QAction("Dark Theme", self)
+        dark_theme_action.triggered.connect(partial(self.apply_theme, 'dark_blue.xml'))
+        view_menu.addAction(dark_theme_action)
 
         analysis_menu = data_menu.addMenu("Analyze")
 
