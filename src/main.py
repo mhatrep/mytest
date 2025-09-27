@@ -595,26 +595,49 @@ class MainWindow(QMainWindow):
 
     def __on_sql_selection_changed(self):
         editor = self.tab_widget.currentWidget()
-        if not isinstance(editor, QsciScintilla):
+        if not isinstance(editor, QsciScintilla) or not hasattr(self, 'word_highlight_indicator'):
             return
 
-        # Clear previous indicators
-        editor.clearIndicatorRange(0, 0, editor.lines(), len(editor.text()), self.word_highlight_indicator)
+        # Disconnect the signal to prevent infinite recursion
+        try:
+            editor.selectionChanged.disconnect(self.__on_sql_selection_changed)
+        except TypeError:
+            # Signal might already be disconnected, which is fine.
+            pass
 
-        # Get selected text
-        selected_text = editor.selectedText()
+        try:
+            # Clear previous indicators for the entire document first.
+            editor.SendScintilla(editor.SCI_SETINDICATORCURRENT, self.word_highlight_indicator)
+            editor.SendScintilla(editor.SCI_INDICATORCLEARRANGE, 0, len(editor.text()))
 
-        # Highlight all occurrences of the selected text
-        if selected_text and len(selected_text) > 1:
-            # Find the first occurrence
-            found = editor.findFirst(selected_text, True, True, True, True)
+            selected_text = editor.selectedText()
+
+            # We only proceed if there's a selection of more than one character.
+            if not selected_text or len(selected_text) <= 1:
+                return
+
+            # Perform the search, disabling regex to prevent crashes.
+            match_case = True
+            whole_word = True
+            use_regex = False  # CRITICAL FIX: Do not use regex.
+
+            # findFirst returns a boolean; the match becomes the new selection.
+            found = editor.findFirst(selected_text, use_regex, match_case, whole_word, True, True, 0, 0)
+
             while found:
-                # Fill the indicator
-                editor.fillIndicatorRange(editor.SendScintilla(editor.SCI_GETSELECTIONNSTART),
-                                          editor.SendScintilla(editor.SCI_GETSELECTIONNEND) - editor.SendScintilla(editor.SCI_GETSELECTIONNSTART),
-                                          self.word_highlight_indicator)
-                # Find the next occurrence
+                # Get the position of the found text (the new selection)
+                start_pos = editor.SendScintilla(editor.SCI_GETSELECTIONSTART)
+                end_pos = editor.SendScintilla(editor.SCI_GETSELECTIONEND)
+                length = end_pos - start_pos
+
+                # Apply the indicator to the found range.
+                editor.SendScintilla(editor.SCI_INDICATORFILLRANGE, start_pos, length)
+
+                # Find the next occurrence.
                 found = editor.findNext()
+        finally:
+            # Always reconnect the signal.
+            editor.selectionChanged.connect(self.__on_sql_selection_changed)
 
 
     def on_cell_double_clicked(self, index):
