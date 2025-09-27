@@ -4,4 +4,3 @@ setuptools
 csvkit
 ydata-profiling
 sweetviz
-qt-material

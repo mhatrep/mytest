@@ -5,16 +5,14 @@ import webbrowser
 import tempfile
 import subprocess
 import traceback
-from functools import partial
 from PyQt6.QtCore import QSortFilterProxyModel, Qt, QObject, QThread, pyqtSignal, QAbstractTableModel
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle, QDialogButtonBox)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
 from PyQt6.QtGui import QAction
 from table_model import PandasModel
-import qt_material
 from reporter import generate_recommendations
 import profilers
 import exporter
@@ -28,14 +26,11 @@ class KeyDetectorOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Detect Keys Options")
-        self.layout = QVBoxLayout(self)
-        self.layout.addWidget(QLabel("No specific options to configure for key detection yet."))
-
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Run Analysis")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        self.layout.addWidget(button_box)
+        self.layout = QFormLayout(self)
+        # Options will be added in a later phase
+        self.ok_button = QPushButton("Run Analysis")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
 
     def get_options(self):
         # To be expanded in later phases
@@ -97,23 +92,19 @@ class GrainFinderDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Find Data Grain Options")
-        self.layout = QVBoxLayout(self)
-        form_layout = QFormLayout()
+        self.layout = QFormLayout(self)
 
         self.normalize_ws_check = QCheckBox("Normalize Whitespace")
         self.normalize_ws_check.setChecked(True)
-        form_layout.addRow("Normalization:", self.normalize_ws_check)
+        self.layout.addRow("Normalization:", self.normalize_ws_check)
 
         self.lowercase_check = QCheckBox("Lowercase Strings")
         self.lowercase_check.setChecked(False)
-        form_layout.addRow("", self.lowercase_check)
-        self.layout.addLayout(form_layout)
+        self.layout.addRow("", self.lowercase_check)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Find Grain")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        self.layout.addWidget(button_box)
+        self.ok_button = QPushButton("Find Grain")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
 
     def get_options(self):
         return {
@@ -223,30 +214,26 @@ class HierarchyOptionsDialog(QDialog):
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Find Hierarchies Options")
-        self.layout = QVBoxLayout(self)
-        form_layout = QFormLayout()
+        self.layout = QFormLayout(self)
 
         self.parent_combo = QComboBox()
         self.parent_combo.addItems(columns)
-        form_layout.addRow("Parent Column:", self.parent_combo)
+        self.layout.addRow("Parent Column:", self.parent_combo)
 
         self.child_combo = QComboBox()
         self.child_combo.addItems(columns)
         # Select second item by default if available
         if len(columns) > 1:
             self.child_combo.setCurrentIndex(1)
-        form_layout.addRow("Child Column:", self.child_combo)
+        self.layout.addRow("Child Column:", self.child_combo)
 
         self.swap_button = QPushButton("Swap")
         self.swap_button.clicked.connect(self.swap_columns)
-        form_layout.addWidget(self.swap_button)
-        self.layout.addLayout(form_layout)
+        self.layout.addWidget(self.swap_button)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Find Hierarchies")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        self.layout.addWidget(button_box)
+        self.ok_button = QPushButton("Find Hierarchies")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
 
     def swap_columns(self):
         parent_index = self.parent_combo.currentIndex()
@@ -319,8 +306,7 @@ class UniqueValuesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Export Unique Values Options")
-        self.layout = QVBoxLayout(self)
-        form_layout = QFormLayout()
+        self.layout = QFormLayout(self)
 
         self.case_sensitive_check = QCheckBox("Case-sensitive")
         self.case_sensitive_check.setChecked(False)
@@ -331,16 +317,13 @@ class UniqueValuesDialog(QDialog):
         self.sort_combo = QComboBox()
         self.sort_combo.addItems(["Alphabetical (A-Z)", "Frequency (High to Low)"])
 
-        form_layout.addRow("Case Sensitivity:", self.case_sensitive_check)
-        form_layout.addRow("Frequency Count:", self.include_frequency_check)
-        form_layout.addRow("Sort Order:", self.sort_combo)
-        self.layout.addLayout(form_layout)
+        self.layout.addRow("Case Sensitivity:", self.case_sensitive_check)
+        self.layout.addRow("Frequency Count:", self.include_frequency_check)
+        self.layout.addRow("Sort Order:", self.sort_combo)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Export")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        self.layout.addWidget(button_box)
+        self.ok_button = QPushButton("Export")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
 
     def get_options(self):
         return {
@@ -378,8 +361,7 @@ class ReportOptionsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Generate Report")
-        self.layout = QVBoxLayout(self)
-        form_layout = QFormLayout()
+        self.layout = QFormLayout(self)
 
         self.profiler_combo = QComboBox()
         self.profiler_combo.addItems([
@@ -388,18 +370,15 @@ class ReportOptionsDialog(QDialog):
             "YData-Profiling",
             "Sweetviz"
         ])
-        form_layout.addRow("Select Profiler:", self.profiler_combo)
+        self.layout.addRow("Select Profiler:", self.profiler_combo)
 
         self.open_after_save_check = QCheckBox("Open file after saving")
         self.open_after_save_check.setChecked(True)
-        form_layout.addRow(self.open_after_save_check)
-        self.layout.addLayout(form_layout)
+        self.layout.addRow(self.open_after_save_check)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Generate")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        self.layout.addWidget(button_box)
+        self.ok_button = QPushButton("Generate")
+        self.ok_button.clicked.connect(self.accept)
+        self.layout.addRow(self.ok_button)
 
     def get_options(self):
         return {
@@ -436,20 +415,15 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("&File")
         data_menu = menu_bar.addMenu("&Data")
         tools_menu = menu_bar.addMenu("&Tools")
-        view_menu = menu_bar.addMenu("&View")
-
-        # The View menu is now empty, but we can leave it for future additions.
 
         analysis_menu = data_menu.addMenu("Analyze")
 
-        style = self.style()
-
-        detect_keys_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView), "Detect Keys...", self)
+        detect_keys_action = QAction("Detect Keys...", self)
         detect_keys_action.setStatusTip("Scan the current file to find primary key candidates")
         detect_keys_action.triggered.connect(self.show_key_detector_dialog)
         analysis_menu.addAction(detect_keys_action)
 
-        open_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Open", self)
+        open_action = QAction("Open", self)
         open_action.setStatusTip("Open a CSV file")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
@@ -459,28 +433,29 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        self.report_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Generate Report", self)
+        self.report_action = QAction("Generate Report", self)
         self.report_action.setStatusTip("Generate a report from the data")
         self.report_action.triggered.connect(self.show_report_dialog)
         tools_menu.addAction(self.report_action)
 
-        export_unique_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Export Unique Values", self)
+        export_unique_action = QAction("Export Unique Values", self)
         export_unique_action.setStatusTip("Export unique values for each column to text files")
         export_unique_action.triggered.connect(self.show_export_unique_dialog)
         tools_menu.addAction(export_unique_action)
 
-        grain_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Find Data Grain", self)
+        grain_finder_action = QAction("Find Data Grain", self)
         grain_finder_action.setStatusTip("Analyze column combinations to find potential composite keys")
         grain_finder_action.triggered.connect(self.show_grain_finder_dialog)
         tools_menu.addAction(grain_finder_action)
 
-        hierarchy_finder_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowUp), "Find Hierarchies", self)
+        hierarchy_finder_action = QAction("Find Hierarchies", self)
         hierarchy_finder_action.setStatusTip("Detect one-to-many relationships between columns")
         hierarchy_finder_action.triggered.connect(self.show_hierarchy_finder_dialog)
         tools_menu.addAction(hierarchy_finder_action)
 
         tools_menu.addSeparator()
 
+        style = self.style()
         generate_queries_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView), "Generate SQL Queries...", self)
         generate_queries_action.setStatusTip("Generate a standard set of SQL profiling queries")
         generate_queries_action.triggered.connect(self.show_query_generator_dialog)
@@ -895,17 +870,6 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Use a light base theme and override colors for high contrast
-    extra = {
-        'primaryColor': '#009688',      # Teal
-        'primaryLightColor': '#4DB6AC',
-        'secondaryColor': '#FFFFFF',    # White
-        'secondaryLightColor': '#F5F5F5',
-        'secondaryDarkColor': '#E0E0E0',
-        'primaryTextColor': '#FFFFFF',
-        'secondaryTextColor': '#000000', # Black
-    }
-    qt_material.apply_stylesheet(app, theme='light_blue.xml', extra=extra)
     main_win = MainWindow()
     main_win.show()
     sys.exit(app.exec())
