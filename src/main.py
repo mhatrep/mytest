@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
                              QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction, QFont, QColor
 from table_model import PandasModel
 from reporter import generate_recommendations
 import profilers
@@ -568,7 +568,14 @@ class MainWindow(QMainWindow):
         lexer.setDefaultFont(font)
         editor.setLexer(lexer)
 
-        editor.setSendSelectionToFind(True)
+        # Indicator for highlighting all occurrences of the selected word.
+        self.word_highlight_indicator = 8  # Use indicator 8
+        editor.indicatorDefine(QsciScintilla.IndicatorStyle.RoundBoxIndicator, self.word_highlight_indicator)
+        editor.setIndicatorForegroundColor(QColor(0, 0, 255, 50), self.word_highlight_indicator)
+        editor.setIndicatorOutlineColor(QColor(0, 0, 255, 150), self.word_highlight_indicator)
+        editor.setIndicatorDrawUnder(True, self.word_highlight_indicator)
+
+        editor.selectionChanged.connect(self.__on_sql_selection_changed)
 
         return editor
 
@@ -585,6 +592,30 @@ class MainWindow(QMainWindow):
         self.grain_finder_action.setEnabled(is_csv)
         self.hierarchy_finder_action.setEnabled(is_csv)
         self.generate_queries_action.setEnabled(True)
+
+    def __on_sql_selection_changed(self):
+        editor = self.tab_widget.currentWidget()
+        if not isinstance(editor, QsciScintilla):
+            return
+
+        # Clear previous indicators
+        editor.clearIndicatorRange(0, 0, editor.lines(), len(editor.text()), self.word_highlight_indicator)
+
+        # Get selected text
+        selected_text = editor.selectedText()
+
+        # Highlight all occurrences of the selected text
+        if selected_text and len(selected_text) > 1:
+            # Find the first occurrence
+            found = editor.findFirst(selected_text, True, True, True, True)
+            while found:
+                # Fill the indicator
+                editor.fillIndicatorRange(editor.SendScintilla(editor.SCI_GETSELECTIONNSTART),
+                                          editor.SendScintilla(editor.SCI_GETSELECTIONNEND) - editor.SendScintilla(editor.SCI_GETSELECTIONNSTART),
+                                          self.word_highlight_indicator)
+                # Find the next occurrence
+                found = editor.findNext()
+
 
     def on_cell_double_clicked(self, index):
         if not index.isValid():
