@@ -25,27 +25,24 @@ import key_detector
 import query_generator
 
 
-class HighlightingDelegate(QStyledItemDelegate):
+class HighlightProxyModel(QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.highlight_text = ""
+        self._highlight_text = ""
 
     def set_highlight_text(self, text):
-        self.highlight_text = text.lower() if text else ""
-        # We need to trigger a repaint on the views that use this delegate
-        # This is typically done by emitting a signal that the view is connected to,
-        # or more simply, by telling the view to update. The view update logic
-        # will be handled in the main window.
+        self._highlight_text = text.lower() if text else ""
+        self.invalidateFilter() # This will cause the view to re-query the data
 
-    def paint(self, painter, option, index):
-        # First, let the base class paint the default cell content
-        super().paint(painter, option, index)
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.BackgroundRole and self._highlight_text:
+            # Get the display text for the cell
+            display_text = self.sourceModel().data(self.mapToSource(index), Qt.ItemDataRole.DisplayRole)
+            if display_text is not None and self._highlight_text in str(display_text).lower():
+                return QColor(255, 255, 0, 100) # Semi-transparent yellow
 
-        if self.highlight_text and self.highlight_text in str(index.data(Qt.ItemDataRole.DisplayRole)).lower():
-            painter.save()
-            # Use a semi-transparent color to not obscure the text
-            painter.fillRect(option.rect, QColor(255, 255, 0, 100))
-            painter.restore()
+        # For all other roles, fall back to the default implementation
+        return super().data(index, role)
 
 
 class HighlightWorker(QObject):
@@ -565,8 +562,6 @@ class MainWindow(QMainWindow):
 
         self.tabs_data = [] # To store data for each tab
 
-        self.thread = None
-        self.worker = None
         self.highlight_thread = None
         self.highlight_worker = None
         self.is_long_running_task_active = False
@@ -647,7 +642,7 @@ class MainWindow(QMainWindow):
                 if file_path.lower().endswith('.csv'):
                     df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
                     table_view = QTableView()
-                    proxy_model = QSortFilterProxyModel()
+                    proxy_model = HighlightProxyModel(table_view)
                     pandas_model = PandasModel(df)
                     proxy_model.setSourceModel(pandas_model)
                     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -655,17 +650,12 @@ class MainWindow(QMainWindow):
                     table_view.setModel(proxy_model)
                     table_view.doubleClicked.connect(self.on_cell_double_clicked)
 
-                    # Set up the custom delegate for highlighting
-                    delegate = HighlightingDelegate(table_view)
-                    table_view.setItemDelegate(delegate)
-
                     tab_data = {
                         'type': 'csv',
                         'df': df,
                         'proxy_model': proxy_model,
                         'file_path': file_path,
                         'widget': table_view,
-                        'highlighter': delegate,
                     }
                     self.tabs_data.append(tab_data)
                     index = self.tab_widget.addTab(table_view, tab_name)
@@ -807,20 +797,15 @@ class MainWindow(QMainWindow):
         tab_data = self.tabs_data[current_index]
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
-            highlighter = tab_data['highlighter']
-            table_view = tab_data['widget']
 
             if self.highlight_only_check.isChecked():
-                # When highlighting, we want to see all rows, so clear the filter.
+                # When highlighting, clear the row filter and set the highlight text.
                 proxy_model.setFilterRegularExpression("")
-                highlighter.set_highlight_text(text)
+                proxy_model.set_highlight_text(text)
             else:
                 # When filtering, clear the highlight and apply the row filter.
-                highlighter.set_highlight_text("")
+                proxy_model.set_highlight_text("")
                 proxy_model.setFilterRegularExpression(text)
-
-            # Ensure the view is repainted to show/hide highlights
-            table_view.viewport().update()
 
         elif tab_data.get('type') == 'sql':
             editor = tab_data['widget']
@@ -832,8 +817,8 @@ class MainWindow(QMainWindow):
             self.show_error_message("Please open a file first.")
             return
 
-        if self.thread is not None and self.thread.isRunning():
-            self.show_error_message("A report is already being generated.")
+        if self.is_long_running_task_active:
+            self.show_error_message("Another process is already running.")
             return
 
         dialog = ReportOptionsDialog(self)
@@ -842,20 +827,20 @@ class MainWindow(QMainWindow):
 
         self.options = dialog.get_options()
 
-        self.thread = QThread()
-        self.worker = Worker(self._generate_report_task)
-        self.worker.moveToThread(self.thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._generate_report_task)
+        worker.moveToThread(thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_report_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_report_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.thread.start()
+        thread.start()
         self.report_action.setEnabled(False)
         self.statusBar().showMessage(f"Generating report with {self.options['profiler']}... (this may take a while)")
 
@@ -942,7 +927,7 @@ class MainWindow(QMainWindow):
             self.show_error_message("Please open a file first.")
             return
 
-        if self.thread is not None and self.thread.isRunning():
+        if self.is_long_running_task_active:
             self.show_error_message("Another process is already running.")
             return
 
@@ -957,21 +942,20 @@ class MainWindow(QMainWindow):
         if not dir_path:
             return
 
-        self.thread = QThread()
-        self.worker = Worker(self._export_unique_values_task, options, dir_path)
-        self.worker.moveToThread(self.thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._export_unique_values_task, options, dir_path)
+        worker.moveToThread(thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_export_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_export_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.thread.start()
+        thread.start()
         self.statusBar().showMessage("Exporting unique values...")
 
     def _export_unique_values_task(self, options, dir_path):
@@ -994,7 +978,7 @@ class MainWindow(QMainWindow):
             self.show_error_message("Please open a file first.")
             return
 
-        if self.thread is not None and self.thread.isRunning():
+        if self.is_long_running_task_active:
             self.show_error_message("Another process is already running.")
             return
 
@@ -1004,21 +988,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        self.thread = QThread()
-        self.worker = Worker(self._run_grain_finder_task, options)
-        self.worker.moveToThread(self.thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_grain_finder_task, options)
+        worker.moveToThread(thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_grain_finder_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_grain_finder_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.thread.start()
+        thread.start()
         self.statusBar().showMessage("Finding data grain... this may take a while.")
 
     def _run_grain_finder_task(self, options):
@@ -1043,7 +1026,7 @@ class MainWindow(QMainWindow):
             self.show_error_message("Please open a file first.")
             return
 
-        if self.thread is not None and self.thread.isRunning():
+        if self.is_long_running_task_active:
             self.show_error_message("Another process is already running.")
             return
 
@@ -1053,21 +1036,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        self.thread = QThread()
-        self.worker = Worker(self._run_key_detector_task, options)
-        self.worker.moveToThread(self.thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_key_detector_task, options)
+        worker.moveToThread(thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_key_detector_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_key_detector_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.thread.start()
+        thread.start()
         self.statusBar().showMessage("Detecting primary key candidates... this may take a while.")
 
     def _run_key_detector_task(self, options):
@@ -1091,7 +1073,7 @@ class MainWindow(QMainWindow):
             self.show_error_message("Please open a file first.")
             return
 
-        if self.thread is not None and self.thread.isRunning():
+        if self.is_long_running_task_active:
             self.show_error_message("Another process is already running.")
             return
 
@@ -1110,21 +1092,20 @@ class MainWindow(QMainWindow):
             self.show_error_message("Parent and Child columns cannot be the same.")
             return
 
-        self.thread = QThread()
-        self.worker = Worker(self._run_hierarchy_finder_task, options)
-        self.worker.moveToThread(self.thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_hierarchy_finder_task, options)
+        worker.moveToThread(thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_hierarchy_finder_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_hierarchy_finder_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(lambda: setattr(self, 'thread', None))
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.thread.start()
+        thread.start()
         self.statusBar().showMessage("Finding hierarchies... this may take a while.")
 
     def _run_hierarchy_finder_task(self, options):
