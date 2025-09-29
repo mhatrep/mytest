@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
+    QCheckBox,
 )
 
 class FieldListWidget(QListWidget):
@@ -173,6 +174,9 @@ class PivotTableApp(QMainWindow):
             list_widget.model().rowsRemoved.connect(self.repopulate_field_list)
         self.values_table.items_changed.connect(self.repopulate_field_list)
 
+        self.totals_checkbox = QCheckBox("Show Grand Totals")
+        self.totals_checkbox.setChecked(True)
+
         self.table_view = QTableView()
         self.load_button = QPushButton("Load CSV")
         self.load_button.clicked.connect(self.load_csv)
@@ -192,6 +196,7 @@ class PivotTableApp(QMainWindow):
         config_layout.addWidget(self.cols_list)
         config_layout.addWidget(QLabel("Values"))
         config_layout.addWidget(self.values_table)
+        config_layout.addWidget(self.totals_checkbox)
         config_layout.addWidget(self.pivot_button)
 
         main_layout = QVBoxLayout()
@@ -255,7 +260,9 @@ class PivotTableApp(QMainWindow):
             return
 
         try:
-            pivot_table = self.df.pivot_table(index=rows, columns=cols, values=values, aggfunc=aggfunc)
+            margins = self.totals_checkbox.isChecked()
+            pivot_table = self.df.pivot_table(index=rows, columns=cols, values=values, aggfunc=aggfunc,
+                                              margins=margins, margins_name='Grand Total')
             self.display_df(pivot_table.reset_index())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create pivot table: {e}")
