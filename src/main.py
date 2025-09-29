@@ -464,29 +464,35 @@ class ReportOptionsDialog(QDialog):
         }
 
 
-class SqlEditorWithContextMenu(QsciScintilla):
+class CsvTableView(QTableView):
     def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
         self.main_window = main_window
 
     def contextMenuEvent(self, event):
-        menu = self.createStandardContextMenu()
-        menu.addSeparator()
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        index = self.indexAt(event.pos())
 
-        highlight_action = QAction("Highlight matching cells", self)
-        highlight_action.setEnabled(self.hasSelectedText())
-        highlight_action.triggered.connect(self.highlight_selection)
-        menu.addAction(highlight_action)
+        if index.isValid():
+            cell_text = index.model().data(index, Qt.ItemDataRole.DisplayRole)
+            if cell_text:
+                action_text = f"Highlight cells matching '{cell_text}'"
+                # To prevent long menu items
+                if len(action_text) > 60:
+                    action_text = action_text[:57] + "..."
 
-        menu.exec(event.globalPos())
+                highlight_action = QAction(action_text, self)
+                highlight_action.triggered.connect(lambda: self.highlight_text(cell_text))
+                menu.addAction(highlight_action)
 
-    def highlight_selection(self):
-        if not self.main_window:
-            return
+        if menu.actions():
+            menu.exec(event.globalPos())
 
-        selected_text = self.selectedText()
-        if selected_text and not selected_text.isspace():
-            self.main_window.filter_input.setText(selected_text)
+    def highlight_text(self, text):
+        if self.main_window:
+            self.main_window.filter_input.setText(text)
+            self.main_window.filter_input.setFocus()
 
 
 class MainWindow(QMainWindow):
@@ -666,7 +672,7 @@ class MainWindow(QMainWindow):
                 tab_name = os.path.basename(file_path)
                 if file_path.lower().endswith('.csv'):
                     df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
-                    table_view = QTableView()
+                    table_view = CsvTableView(main_window=self)
                     proxy_model = HighlightProxyModel(table_view)
                     pandas_model = PandasModel(df)
                     proxy_model.setSourceModel(pandas_model)
@@ -710,7 +716,7 @@ class MainWindow(QMainWindow):
         font.setFixedPitch(True)
         font.setPointSize(12)
 
-        editor = SqlEditorWithContextMenu(main_window=self)
+        editor = QsciScintilla()
         editor.setUtf8(True)
         editor.setFont(font)
         editor.setBraceMatching(QsciScintilla.BraceMatch.SloppyBraceMatch)
