@@ -1,7 +1,8 @@
 import sys
 import pandas as pd
 from PySide6.QtCore import Qt
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QMimeData
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QDrag
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -21,7 +22,22 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+
+class FieldListWidget(QListWidget):
+    """A QListWidget that starts a drag with plain text MIME data."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragOnly)
+
+    def startDrag(self, supportedActions):
+        item = self.currentItem()
+        if item:
+            mimeData = QMimeData()
+            mimeData.setText(item.text())
+            drag = QDrag(self)
+            drag.setMimeData(mimeData)
+            drag.exec(Qt.MoveAction)
 
 class ValuesTableWidget(QTableWidget):
     """A QTableWidget customized for handling value fields and their aggregations."""
@@ -38,13 +54,13 @@ class ValuesTableWidget(QTableWidget):
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
-            event.accept()
+            event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
         if event.mimeData().hasText():
-            event.accept()
+            event.acceptProposedAction()
         else:
             event.ignore()
 
@@ -52,7 +68,7 @@ class ValuesTableWidget(QTableWidget):
         if event.mimeData().hasText():
             field_name = event.mimeData().text()
             self.add_field(field_name)
-            event.accept()
+            event.acceptProposedAction()
         else:
             event.ignore()
 
@@ -112,10 +128,7 @@ class PivotTableApp(QMainWindow):
             list_widget.setDefaultDropAction(Qt.MoveAction)
             list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
-        self.field_list = QListWidget()
-        self.field_list.setDragEnabled(True)
-        self.field_list.setDragDropMode(QAbstractItemView.DragOnly)
-
+        self.field_list = FieldListWidget()
 
         self.rows_list = QListWidget()
         setup_list_widget(self.rows_list)
