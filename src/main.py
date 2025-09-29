@@ -564,6 +564,8 @@ class MainWindow(QMainWindow):
 
         self.highlight_thread = None
         self.highlight_worker = None
+        self.worker_thread = None
+        self.worker = None
         self.is_long_running_task_active = False
         self.on_tab_changed(-1)
 
@@ -798,13 +800,13 @@ class MainWindow(QMainWindow):
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
 
+            # Always set the highlight text.
+            proxy_model.set_highlight_text(text)
+
+            # The checkbox now only toggles whether non-matching rows are filtered out.
             if self.highlight_only_check.isChecked():
-                # When highlighting, clear the row filter and set the highlight text.
                 proxy_model.setFilterRegularExpression("")
-                proxy_model.set_highlight_text(text)
             else:
-                # When filtering, clear the highlight and apply the row filter.
-                proxy_model.set_highlight_text("")
                 proxy_model.setFilterRegularExpression(text)
 
         elif tab_data.get('type') == 'sql':
@@ -827,20 +829,20 @@ class MainWindow(QMainWindow):
 
         self.options = dialog.get_options()
 
-        thread = QThread(parent=self)
-        worker = Worker(self._generate_report_task)
-        worker.moveToThread(thread)
+        self.worker_thread = QThread(parent=self)
+        self.worker = Worker(self._generate_report_task)
+        self.worker.moveToThread(self.worker_thread)
 
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_report_finished)
-        worker.error.connect(self.show_error_message)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_report_finished)
+        self.worker.error.connect(self.show_error_message)
 
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.is_long_running_task_active = True
-        thread.start()
+        self.worker_thread.start()
         self.report_action.setEnabled(False)
         self.statusBar().showMessage(f"Generating report with {self.options['profiler']}... (this may take a while)")
 
@@ -872,7 +874,8 @@ class MainWindow(QMainWindow):
 
         report_content, file_ext = result
         self.save_report(report_content, file_ext, self.options['open_after_save'])
-        self.thread = None # Fix RuntimeError by nullifying the thread
+        self.worker = None
+        self.worker_thread = None
 
     def save_report(self, content, extension, open_after_save):
         if isinstance(content, dict):
@@ -942,20 +945,20 @@ class MainWindow(QMainWindow):
         if not dir_path:
             return
 
-        thread = QThread(parent=self)
-        worker = Worker(self._export_unique_values_task, options, dir_path)
-        worker.moveToThread(thread)
+        self.worker_thread = QThread(parent=self)
+        self.worker = Worker(self._export_unique_values_task, options, dir_path)
+        self.worker.moveToThread(self.worker_thread)
 
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_export_finished)
-        worker.error.connect(self.show_error_message)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_export_finished)
+        self.worker.error.connect(self.show_error_message)
 
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.is_long_running_task_active = True
-        thread.start()
+        self.worker_thread.start()
         self.statusBar().showMessage("Exporting unique values...")
 
     def _export_unique_values_task(self, options, dir_path):
@@ -971,6 +974,8 @@ class MainWindow(QMainWindow):
     def _on_export_finished(self, message):
         self.is_long_running_task_active = False
         self.statusBar().showMessage(message, 8000)
+        self.worker = None
+        self.worker_thread = None
 
     def show_grain_finder_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -988,20 +993,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        thread = QThread(parent=self)
-        worker = Worker(self._run_grain_finder_task, options)
-        worker.moveToThread(thread)
+        self.worker_thread = QThread(parent=self)
+        self.worker = Worker(self._run_grain_finder_task, options)
+        self.worker.moveToThread(self.worker_thread)
 
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_grain_finder_finished)
-        worker.error.connect(self.show_error_message)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_grain_finder_finished)
+        self.worker.error.connect(self.show_error_message)
 
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.is_long_running_task_active = True
-        thread.start()
+        self.worker_thread.start()
         self.statusBar().showMessage("Finding data grain... this may take a while.")
 
     def _run_grain_finder_task(self, options):
@@ -1019,6 +1024,8 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = GrainReportDialog(result_data, self)
         dialog.exec()
+        self.worker = None
+        self.worker_thread = None
 
     def show_key_detector_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1036,20 +1043,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        thread = QThread(parent=self)
-        worker = Worker(self._run_key_detector_task, options)
-        worker.moveToThread(thread)
+        self.worker_thread = QThread(parent=self)
+        self.worker = Worker(self._run_key_detector_task, options)
+        self.worker.moveToThread(self.worker_thread)
 
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_key_detector_finished)
-        worker.error.connect(self.show_error_message)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_key_detector_finished)
+        self.worker.error.connect(self.show_error_message)
 
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.is_long_running_task_active = True
-        thread.start()
+        self.worker_thread.start()
         self.statusBar().showMessage("Detecting primary key candidates... this may take a while.")
 
     def _run_key_detector_task(self, options):
@@ -1066,6 +1073,8 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = KeyDetectorReportDialog(result_data, self)
         dialog.exec()
+        self.worker = None
+        self.worker_thread = None
 
     def show_hierarchy_finder_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1092,20 +1101,20 @@ class MainWindow(QMainWindow):
             self.show_error_message("Parent and Child columns cannot be the same.")
             return
 
-        thread = QThread(parent=self)
-        worker = Worker(self._run_hierarchy_finder_task, options)
-        worker.moveToThread(thread)
+        self.worker_thread = QThread(parent=self)
+        self.worker = Worker(self._run_hierarchy_finder_task, options)
+        self.worker.moveToThread(self.worker_thread)
 
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_hierarchy_finder_finished)
-        worker.error.connect(self.show_error_message)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_hierarchy_finder_finished)
+        self.worker.error.connect(self.show_error_message)
 
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.is_long_running_task_active = True
-        thread.start()
+        self.worker_thread.start()
         self.statusBar().showMessage("Finding hierarchies... this may take a while.")
 
     def _run_hierarchy_finder_task(self, options):
@@ -1122,6 +1131,8 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = HierarchyReportDialog(analysis_result, self)
         dialog.exec()
+        self.worker = None
+        self.worker_thread = None
 
     def show_query_generator_dialog(self):
         current_index = self.tab_widget.currentIndex()
