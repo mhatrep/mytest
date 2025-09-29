@@ -464,6 +464,31 @@ class ReportOptionsDialog(QDialog):
         }
 
 
+class SqlEditorWithContextMenu(QsciScintilla):
+    def __init__(self, parent=None, main_window=None):
+        super().__init__(parent)
+        self.main_window = main_window
+
+    def contextMenuEvent(self, event):
+        menu = self.createStandardContextMenu()
+        menu.addSeparator()
+
+        highlight_action = QAction("Highlight matching cells", self)
+        highlight_action.setEnabled(self.hasSelectedText())
+        highlight_action.triggered.connect(self.highlight_selection)
+        menu.addAction(highlight_action)
+
+        menu.exec(event.globalPos())
+
+    def highlight_selection(self):
+        if not self.main_window:
+            return
+
+        selected_text = self.selectedText()
+        if selected_text and not selected_text.isspace():
+            self.main_window.filter_input.setText(selected_text)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -564,8 +589,6 @@ class MainWindow(QMainWindow):
 
         self.highlight_thread = None
         self.highlight_worker = None
-        self.worker_thread = None
-        self.worker = None
         self.is_long_running_task_active = False
         self.on_tab_changed(-1)
 
@@ -687,7 +710,7 @@ class MainWindow(QMainWindow):
         font.setFixedPitch(True)
         font.setPointSize(12)
 
-        editor = QsciScintilla()
+        editor = SqlEditorWithContextMenu(main_window=self)
         editor.setUtf8(True)
         editor.setFont(font)
         editor.setBraceMatching(QsciScintilla.BraceMatch.SloppyBraceMatch)
@@ -829,20 +852,20 @@ class MainWindow(QMainWindow):
 
         self.options = dialog.get_options()
 
-        self.worker_thread = QThread(parent=self)
-        self.worker = Worker(self._generate_report_task)
-        self.worker.moveToThread(self.worker_thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._generate_report_task)
+        worker.moveToThread(thread)
 
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_report_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_report_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.worker_thread.start()
+        thread.start()
         self.report_action.setEnabled(False)
         self.statusBar().showMessage(f"Generating report with {self.options['profiler']}... (this may take a while)")
 
@@ -874,6 +897,7 @@ class MainWindow(QMainWindow):
 
         report_content, file_ext = result
         self.save_report(report_content, file_ext, self.options['open_after_save'])
+        self.thread = None # Fix RuntimeError by nullifying the thread
 
     def save_report(self, content, extension, open_after_save):
         if isinstance(content, dict):
@@ -943,20 +967,20 @@ class MainWindow(QMainWindow):
         if not dir_path:
             return
 
-        self.worker_thread = QThread(parent=self)
-        self.worker = Worker(self._export_unique_values_task, options, dir_path)
-        self.worker.moveToThread(self.worker_thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._export_unique_values_task, options, dir_path)
+        worker.moveToThread(thread)
 
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_export_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_export_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.worker_thread.start()
+        thread.start()
         self.statusBar().showMessage("Exporting unique values...")
 
     def _export_unique_values_task(self, options, dir_path):
@@ -989,20 +1013,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        self.worker_thread = QThread(parent=self)
-        self.worker = Worker(self._run_grain_finder_task, options)
-        self.worker.moveToThread(self.worker_thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_grain_finder_task, options)
+        worker.moveToThread(thread)
 
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_grain_finder_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_grain_finder_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.worker_thread.start()
+        thread.start()
         self.statusBar().showMessage("Finding data grain... this may take a while.")
 
     def _run_grain_finder_task(self, options):
@@ -1037,20 +1061,20 @@ class MainWindow(QMainWindow):
 
         options = dialog.get_options()
 
-        self.worker_thread = QThread(parent=self)
-        self.worker = Worker(self._run_key_detector_task, options)
-        self.worker.moveToThread(self.worker_thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_key_detector_task, options)
+        worker.moveToThread(thread)
 
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_key_detector_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_key_detector_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.worker_thread.start()
+        thread.start()
         self.statusBar().showMessage("Detecting primary key candidates... this may take a while.")
 
     def _run_key_detector_task(self, options):
@@ -1093,20 +1117,20 @@ class MainWindow(QMainWindow):
             self.show_error_message("Parent and Child columns cannot be the same.")
             return
 
-        self.worker_thread = QThread(parent=self)
-        self.worker = Worker(self._run_hierarchy_finder_task, options)
-        self.worker.moveToThread(self.worker_thread)
+        thread = QThread(parent=self)
+        worker = Worker(self._run_hierarchy_finder_task, options)
+        worker.moveToThread(thread)
 
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_hierarchy_finder_finished)
-        self.worker.error.connect(self.show_error_message)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_hierarchy_finder_finished)
+        worker.error.connect(self.show_error_message)
 
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
         self.is_long_running_task_active = True
-        self.worker_thread.start()
+        thread.start()
         self.statusBar().showMessage("Finding hierarchies... this may take a while.")
 
     def _run_hierarchy_finder_task(self, options):
@@ -1158,16 +1182,14 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
-        # Shut down highlight thread
-        if self.highlight_thread and self.highlight_thread.isRunning():
-            self.highlight_worker.request_abort = True
-            self.highlight_thread.quit()
-            self.highlight_thread.wait()
-
-        # Shut down generic worker thread
-        if self.worker_thread and self.worker_thread.isRunning():
-            self.worker_thread.quit()
-            self.worker_thread.wait()
+        try:
+            if self._thread_is_alive(self.highlight_thread):
+                self.highlight_worker.request_abort = True
+                self.highlight_thread.quit()
+                self.highlight_thread.wait(300)
+        finally:
+            self.highlight_worker = None
+            self.highlight_thread = None
 
         super().closeEvent(event)
 
