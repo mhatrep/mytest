@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
                              QComboBox, QPushButton, QFormLayout, QCheckBox, QTabWidget,
-                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle)
+                             QSpinBox, QLabel, QInputDialog, QHBoxLayout, QStyle, QStyledItemDelegate)
 from PyQt6.QtGui import QAction, QFont, QColor
 from table_model import PandasModel
 from reporter import generate_recommendations
@@ -23,6 +23,29 @@ import grain_finder
 import hierarchy_finder
 import key_detector
 import query_generator
+
+
+class HighlightingDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.highlight_text = ""
+
+    def set_highlight_text(self, text):
+        self.highlight_text = text.lower() if text else ""
+        # We need to trigger a repaint on the views that use this delegate
+        # This is typically done by emitting a signal that the view is connected to,
+        # or more simply, by telling the view to update. The view update logic
+        # will be handled in the main window.
+
+    def paint(self, painter, option, index):
+        # First, let the base class paint the default cell content
+        super().paint(painter, option, index)
+
+        if self.highlight_text and self.highlight_text in str(index.data(Qt.ItemDataRole.DisplayRole)).lower():
+            painter.save()
+            # Use a semi-transparent color to not obscure the text
+            painter.fillRect(option.rect, QColor(255, 255, 0, 100))
+            painter.restore()
 
 
 class HighlightWorker(QObject):
@@ -456,11 +479,18 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.layout = QVBoxLayout(main_widget)
 
-        # Filter input
+        # Filter section
+        filter_layout = QHBoxLayout()
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter data in current tab...")
         self.filter_input.textChanged.connect(self.filter_data)
-        self.layout.addWidget(self.filter_input)
+        filter_layout.addWidget(self.filter_input)
+
+        self.highlight_only_check = QCheckBox("Highlight Only")
+        # We connect this to filter_data so toggling it re-applies the logic
+        self.highlight_only_check.stateChanged.connect(self.filter_data)
+        filter_layout.addWidget(self.highlight_only_check)
+        self.layout.addLayout(filter_layout)
 
         # Tab widget for multiple files
         self.tab_widget = QTabWidget()
@@ -539,6 +569,7 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.highlight_thread = None
         self.highlight_worker = None
+        self.is_long_running_task_active = False
         self.on_tab_changed(-1)
 
     def _thread_is_alive(self, t: QThread | None) -> bool:
@@ -624,12 +655,17 @@ class MainWindow(QMainWindow):
                     table_view.setModel(proxy_model)
                     table_view.doubleClicked.connect(self.on_cell_double_clicked)
 
+                    # Set up the custom delegate for highlighting
+                    delegate = HighlightingDelegate(table_view)
+                    table_view.setItemDelegate(delegate)
+
                     tab_data = {
                         'type': 'csv',
                         'df': df,
                         'proxy_model': proxy_model,
                         'file_path': file_path,
                         'widget': table_view,
+                        'highlighter': delegate,
                     }
                     self.tabs_data.append(tab_data)
                     index = self.tab_widget.addTab(table_view, tab_name)
@@ -690,16 +726,28 @@ class MainWindow(QMainWindow):
     def on_tab_changed(self, index):
         if index < 0 or index >= len(self.tabs_data):
             is_csv = False
+            is_sql = False
         else:
             tab_data = self.tabs_data[index]
             is_csv = tab_data.get('type') == 'csv'
+            is_sql = tab_data.get('type') == 'sql'
 
         self.detect_keys_action.setEnabled(is_csv)
         self.report_action.setEnabled(is_csv)
         self.export_unique_action.setEnabled(is_csv)
         self.grain_finder_action.setEnabled(is_csv)
         self.hierarchy_finder_action.setEnabled(is_csv)
-        self.generate_queries_action.setEnabled(True)
+        self.generate_queries_action.setEnabled(True) # Always enabled
+
+        # Manage the state of the "Highlight Only" checkbox
+        self.highlight_only_check.setEnabled(is_csv)
+        if is_sql:
+            # For SQL tabs, highlighting is the only mode, so check and disable
+            self.highlight_only_check.setChecked(True)
+            self.highlight_only_check.setEnabled(False)
+        else:
+            # For CSV tabs, it's user-configurable
+            self.highlight_only_check.setEnabled(True)
 
     def _apply_highlights(self, editor, matches):
         """
@@ -750,7 +798,8 @@ class MainWindow(QMainWindow):
             self.filter_input.setText(cell_text)
             self.filter_input.setFocus()
 
-    def filter_data(self, text):
+    def filter_data(self, _=None):
+        text = self.filter_input.text()
         current_index = self.tab_widget.currentIndex()
         if current_index < 0 or current_index >= len(self.tabs_data):
             return
@@ -758,7 +807,21 @@ class MainWindow(QMainWindow):
         tab_data = self.tabs_data[current_index]
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
-            proxy_model.setFilterRegularExpression(text)
+            highlighter = tab_data['highlighter']
+            table_view = tab_data['widget']
+
+            if self.highlight_only_check.isChecked():
+                # When highlighting, we want to see all rows, so clear the filter.
+                proxy_model.setFilterRegularExpression("")
+                highlighter.set_highlight_text(text)
+            else:
+                # When filtering, clear the highlight and apply the row filter.
+                highlighter.set_highlight_text("")
+                proxy_model.setFilterRegularExpression(text)
+
+            # Ensure the view is repainted to show/hide highlights
+            table_view.viewport().update()
+
         elif tab_data.get('type') == 'sql':
             editor = tab_data['widget']
             self.trigger_highlighting(editor, text, whole_word=False)
@@ -791,6 +854,7 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
+        self.is_long_running_task_active = True
         self.thread.start()
         self.report_action.setEnabled(False)
         self.statusBar().showMessage(f"Generating report with {self.options['profiler']}... (this may take a while)")
@@ -817,6 +881,7 @@ class MainWindow(QMainWindow):
         raise NotImplementedError(f"Profiler '{profiler_name}' is not implemented yet.")
 
     def _on_report_finished(self, result):
+        self.is_long_running_task_active = False
         self.statusBar().clearMessage()
         self.report_action.setEnabled(True)
 
@@ -905,6 +970,7 @@ class MainWindow(QMainWindow):
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: setattr(self, 'thread', None))
 
+        self.is_long_running_task_active = True
         self.thread.start()
         self.statusBar().showMessage("Exporting unique values...")
 
@@ -919,6 +985,7 @@ class MainWindow(QMainWindow):
         return exporter.export_unique_values(df, output_dir, options)
 
     def _on_export_finished(self, message):
+        self.is_long_running_task_active = False
         self.statusBar().showMessage(message, 8000)
 
     def show_grain_finder_dialog(self):
@@ -950,6 +1017,7 @@ class MainWindow(QMainWindow):
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: setattr(self, 'thread', None))
 
+        self.is_long_running_task_active = True
         self.thread.start()
         self.statusBar().showMessage("Finding data grain... this may take a while.")
 
@@ -964,6 +1032,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_grain_finder_finished(self, result_data):
+        self.is_long_running_task_active = False
         self.statusBar().clearMessage()
         dialog = GrainReportDialog(result_data, self)
         dialog.exec()
@@ -997,6 +1066,7 @@ class MainWindow(QMainWindow):
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: setattr(self, 'thread', None))
 
+        self.is_long_running_task_active = True
         self.thread.start()
         self.statusBar().showMessage("Detecting primary key candidates... this may take a while.")
 
@@ -1010,6 +1080,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_key_detector_finished(self, result_data):
+        self.is_long_running_task_active = False
         self.statusBar().clearMessage()
         dialog = KeyDetectorReportDialog(result_data, self)
         dialog.exec()
@@ -1052,6 +1123,7 @@ class MainWindow(QMainWindow):
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(lambda: setattr(self, 'thread', None))
 
+        self.is_long_running_task_active = True
         self.thread.start()
         self.statusBar().showMessage("Finding hierarchies... this may take a while.")
 
@@ -1065,6 +1137,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_hierarchy_finder_finished(self, analysis_result):
+        self.is_long_running_task_active = False
         self.statusBar().clearMessage()
         dialog = HierarchyReportDialog(analysis_result, self)
         dialog.exec()
@@ -1094,6 +1167,15 @@ class MainWindow(QMainWindow):
             self.show_error_message(f"Error generating queries: {e}\n{traceback.format_exc()}")
 
     def closeEvent(self, event):
+        if self.is_long_running_task_active:
+            QMessageBox.warning(
+                self,
+                "Task in Progress",
+                "A task is currently running. Please wait for it to complete before closing the application."
+            )
+            event.ignore()
+            return
+
         try:
             if self._thread_is_alive(self.highlight_thread):
                 self.highlight_worker.request_abort = True
@@ -1102,6 +1184,7 @@ class MainWindow(QMainWindow):
         finally:
             self.highlight_worker = None
             self.highlight_thread = None
+
         super().closeEvent(event)
 
 
