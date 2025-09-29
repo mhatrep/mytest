@@ -7,7 +7,7 @@ import subprocess
 import traceback
 from PyQt6.QtCore import (QSortFilterProxyModel, Qt, QObject, QThread,
                             pyqtSignal, QAbstractTableModel, QTimer, pyqtSlot)
-import sip
+from PyQt6 import sip
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStatusBar, QToolBar,
                              QTableView, QFileDialog, QLineEdit, QVBoxLayout,
                              QWidget, QDialog, QTextEdit, QMessageBox,
