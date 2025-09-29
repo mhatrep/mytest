@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Qt, Signal, QMimeData
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QDrag
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QDrag, QFont, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -268,20 +268,36 @@ class PivotTableApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to create pivot table: {e}")
 
     def display_df(self, df):
-        """Display a pandas DataFrame in the QTableView, handling multi-level headers."""
+        """Display a pandas DataFrame in the QTableView with styling and autofitting."""
         model = QStandardItemModel()
 
+        # Set bold font for headers
+        font = QFont()
+        font.setBold(True)
+        model.horizontalHeaderItem(0)
+        self.table_view.horizontalHeader().setFont(font)
+
         if isinstance(df.columns, pd.MultiIndex):
-            # Flatten multi-level column headers
-            headers = ['_'.join(map(str, col)).strip() for col in df.columns.values]
+            headers = ['_'.join(map(str, col)).strip('_') for col in df.columns.values]
         else:
             headers = df.columns.tolist()
 
         df.columns = headers
         model.setHorizontalHeaderLabels(headers)
 
+        # Define the color for totals
+        total_color = QColor(220, 220, 220)
+
         for i, row in df.iterrows():
-            items = [QStandardItem(str(val)) for val in row]
+            items = []
+            is_total_row = 'Grand Total' in row.values
+            for col_idx, val in enumerate(row):
+                item = QStandardItem(str(val))
+                # Style the cell if it's in a total row or total column
+                if is_total_row or 'Grand Total' in headers[col_idx]:
+                    item.setBackground(total_color)
+                items.append(item)
             model.appendRow(items)
 
         self.table_view.setModel(model)
+        self.table_view.resizeColumnsToContents()
