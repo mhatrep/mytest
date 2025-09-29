@@ -39,6 +39,35 @@ class FieldListWidget(QListWidget):
             drag.setMimeData(mimeData)
             drag.exec(Qt.MoveAction)
 
+class DropListWidget(QListWidget):
+    """A QListWidget that accepts plain text drops."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        if event.mimeData().hasText():
+            # Ensure the item is not a duplicate
+            field_name = event.mimeData().text()
+            if not self.findItems(field_name, Qt.MatchExactly):
+                self.addItem(field_name)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
+
 class ValuesTableWidget(QTableWidget):
     """A QTableWidget customized for handling value fields and their aggregations."""
     items_changed = Signal()
@@ -130,10 +159,10 @@ class PivotTableApp(QMainWindow):
 
         self.field_list = FieldListWidget()
 
-        self.rows_list = QListWidget()
+        self.rows_list = DropListWidget()
         setup_list_widget(self.rows_list)
 
-        self.cols_list = QListWidget()
+        self.cols_list = DropListWidget()
         setup_list_widget(self.cols_list)
 
         self.values_table = ValuesTableWidget()
