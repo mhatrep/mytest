@@ -874,8 +874,6 @@ class MainWindow(QMainWindow):
 
         report_content, file_ext = result
         self.save_report(report_content, file_ext, self.options['open_after_save'])
-        self.worker = None
-        self.worker_thread = None
 
     def save_report(self, content, extension, open_after_save):
         if isinstance(content, dict):
@@ -974,8 +972,6 @@ class MainWindow(QMainWindow):
     def _on_export_finished(self, message):
         self.is_long_running_task_active = False
         self.statusBar().showMessage(message, 8000)
-        self.worker = None
-        self.worker_thread = None
 
     def show_grain_finder_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1024,8 +1020,6 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = GrainReportDialog(result_data, self)
         dialog.exec()
-        self.worker = None
-        self.worker_thread = None
 
     def show_key_detector_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1073,8 +1067,6 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = KeyDetectorReportDialog(result_data, self)
         dialog.exec()
-        self.worker = None
-        self.worker_thread = None
 
     def show_hierarchy_finder_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1131,8 +1123,6 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         dialog = HierarchyReportDialog(analysis_result, self)
         dialog.exec()
-        self.worker = None
-        self.worker_thread = None
 
     def show_query_generator_dialog(self):
         current_index = self.tab_widget.currentIndex()
@@ -1168,14 +1158,16 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
-        try:
-            if self._thread_is_alive(self.highlight_thread):
-                self.highlight_worker.request_abort = True
-                self.highlight_thread.quit()
-                self.highlight_thread.wait(300)
-        finally:
-            self.highlight_worker = None
-            self.highlight_thread = None
+        # Shut down highlight thread
+        if self.highlight_thread and self.highlight_thread.isRunning():
+            self.highlight_worker.request_abort = True
+            self.highlight_thread.quit()
+            self.highlight_thread.wait()
+
+        # Shut down generic worker thread
+        if self.worker_thread and self.worker_thread.isRunning():
+            self.worker_thread.quit()
+            self.worker_thread.wait()
 
         super().closeEvent(event)
 
