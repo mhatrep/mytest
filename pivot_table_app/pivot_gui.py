@@ -108,7 +108,7 @@ class PivotTableApp(QMainWindow):
             """Configure a QListWidget with drag and drop properties."""
             list_widget.setDragEnabled(True)
             list_widget.setAcceptDrops(True)
-            list_widget.setDragDropMode(QAbstractItemView.InternalMove)
+            list_widget.setDragDropMode(QAbstractItemView.DragDrop)
             list_widget.setDefaultDropAction(Qt.MoveAction)
             list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
@@ -206,14 +206,13 @@ class PivotTableApp(QMainWindow):
 
         rows = [self.rows_list.item(i).text() for i in range(self.rows_list.count())]
         cols = [self.cols_list.item(i).text() for i in range(self.cols_list.count())]
-        values = [self.values_list.item(i).text() for i in range(self.values_list.count())]
+        values, aggfunc = self.values_table.get_fields_and_aggs()
 
         if not rows or not values:
             QMessageBox.warning(self, "Warning", "Please define at least one row and one value.")
             return
 
         try:
-            aggfunc = self.agg_func_combo.currentText()
             pivot_table = self.df.pivot_table(index=rows, columns=cols, values=values, aggfunc=aggfunc)
             self.display_df(pivot_table.reset_index())
         except Exception as e:
