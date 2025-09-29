@@ -1,6 +1,7 @@
 import sys
 import pandas as pd
 from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -16,8 +17,73 @@ from PySide6.QtWidgets import (
     QLabel,
     QComboBox,
     QMessageBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem
+
+class ValuesTableWidget(QTableWidget):
+    """A QTableWidget customized for handling value fields and their aggregations."""
+    items_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setColumnCount(2)
+        self.setHorizontalHeaderLabels(["Field", "Aggregation"])
+        self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.verticalHeader().hide()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasText():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasText():
+            field_name = event.mimeData().text()
+            self.add_field(field_name)
+            event.accept()
+        else:
+            event.ignore()
+
+    def add_field(self, field_name):
+        """Adds a new field to the table if it's not already present."""
+        for row in range(self.rowCount()):
+            if self.item(row, 0).text() == field_name:
+                return  # Avoid duplicates
+
+        row_position = self.rowCount()
+        self.insertRow(row_position)
+
+        field_item = QTableWidgetItem(field_name)
+        self.setItem(row_position, 0, field_item)
+
+        agg_combo = QComboBox()
+        agg_combo.addItems(['sum', 'mean', 'count', 'min', 'max'])
+        self.setCellWidget(row_position, 1, agg_combo)
+        self.items_changed.emit()
+
+    def get_fields_and_aggs(self):
+        """Returns a tuple of (list_of_fields, dict_of_aggregations)."""
+        fields = []
+        aggs = {}
+        for row in range(self.rowCount()):
+            field = self.item(row, 0).text()
+            agg_combo = self.cellWidget(row, 1)
+            agg = agg_combo.currentText()
+            fields.append(field)
+            aggs[field] = agg
+        return fields, aggs
 
 class PivotTableApp(QMainWindow):
     """Main application window for the Pivot Table tool."""
@@ -42,12 +108,14 @@ class PivotTableApp(QMainWindow):
             """Configure a QListWidget with drag and drop properties."""
             list_widget.setDragEnabled(True)
             list_widget.setAcceptDrops(True)
-            list_widget.setDragDropMode(QAbstractItemView.DragDrop)
+            list_widget.setDragDropMode(QAbstractItemView.InternalMove)
             list_widget.setDefaultDropAction(Qt.MoveAction)
             list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         self.field_list = QListWidget()
-        setup_list_widget(self.field_list)
+        self.field_list.setDragEnabled(True)
+        self.field_list.setDragDropMode(QAbstractItemView.DragOnly)
+
 
         self.rows_list = QListWidget()
         setup_list_widget(self.rows_list)
@@ -55,16 +123,13 @@ class PivotTableApp(QMainWindow):
         self.cols_list = QListWidget()
         setup_list_widget(self.cols_list)
 
-        self.values_list = QListWidget()
-        setup_list_widget(self.values_list)
+        self.values_table = ValuesTableWidget()
 
         # Connect signals to repopulate the field list whenever items change
-        for list_widget in [self.field_list, self.rows_list, self.cols_list, self.values_list]:
+        for list_widget in [self.field_list, self.rows_list, self.cols_list]:
             list_widget.model().rowsInserted.connect(self.repopulate_field_list)
             list_widget.model().rowsRemoved.connect(self.repopulate_field_list)
-
-        self.agg_func_combo = QComboBox()
-        self.agg_func_combo.addItems(['sum', 'mean', 'count', 'min', 'max'])
+        self.values_table.items_changed.connect(self.repopulate_field_list)
 
         self.table_view = QTableView()
         self.load_button = QPushButton("Load CSV")
@@ -74,6 +139,7 @@ class PivotTableApp(QMainWindow):
         self.pivot_button.clicked.connect(self.create_pivot_table)
 
     def create_layout(self):
+        """Set up the layout for the main window."""
         config_layout = QVBoxLayout()
         config_layout.addWidget(self.load_button)
         config_layout.addWidget(QLabel("Fields"))
@@ -83,9 +149,7 @@ class PivotTableApp(QMainWindow):
         config_layout.addWidget(QLabel("Columns"))
         config_layout.addWidget(self.cols_list)
         config_layout.addWidget(QLabel("Values"))
-        config_layout.addWidget(self.values_list)
-        config_layout.addWidget(QLabel("Aggregation"))
-        config_layout.addWidget(self.agg_func_combo)
+        config_layout.addWidget(self.values_table)
         config_layout.addWidget(self.pivot_button)
 
         main_layout = QVBoxLayout()
@@ -97,7 +161,7 @@ class PivotTableApp(QMainWindow):
     def repopulate_field_list(self):
         """Ensure the field list only contains unused fields."""
         if self.is_updating:
-            return # Prevent re-entrancy
+            return  # Prevent re-entrancy
 
         self.is_updating = True
         try:
@@ -106,10 +170,11 @@ class PivotTableApp(QMainWindow):
                 used_fields.add(self.rows_list.item(i).text())
             for i in range(self.cols_list.count()):
                 used_fields.add(self.cols_list.item(i).text())
-            for i in range(self.values_list.count()):
-                used_fields.add(self.values_list.item(i).text())
 
-            # Temporarily block signals on the field_list to avoid triggering more updates
+            value_fields, _ = self.values_table.get_fields_and_aggs()
+            for field in value_fields:
+                used_fields.add(field)
+
             self.field_list.blockSignals(True)
             self.field_list.clear()
             for field in self.all_fields:
@@ -117,7 +182,7 @@ class PivotTableApp(QMainWindow):
                     self.field_list.addItem(QListWidgetItem(field))
             self.field_list.blockSignals(False)
         finally:
-            self.is_updating = False # Reset the guard
+            self.is_updating = False
 
     def load_csv(self):
         """Open a file dialog to load a CSV and populate the field list."""
@@ -126,10 +191,10 @@ class PivotTableApp(QMainWindow):
             try:
                 self.df = pd.read_csv(path)
                 self.all_fields = self.df.columns.tolist()
-                self.repopulate_field_list()
                 self.rows_list.clear()
                 self.cols_list.clear()
-                self.values_list.clear()
+                self.values_table.setRowCount(0)
+                self.repopulate_field_list()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load CSV: {e}")
 
@@ -155,9 +220,17 @@ class PivotTableApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to create pivot table: {e}")
 
     def display_df(self, df):
-        """Display a pandas DataFrame in the QTableView."""
+        """Display a pandas DataFrame in the QTableView, handling multi-level headers."""
         model = QStandardItemModel()
-        model.setHorizontalHeaderLabels(df.columns)
+
+        if isinstance(df.columns, pd.MultiIndex):
+            # Flatten multi-level column headers
+            headers = ['_'.join(map(str, col)).strip() for col in df.columns.values]
+        else:
+            headers = df.columns.tolist()
+
+        df.columns = headers
+        model.setHorizontalHeaderLabels(headers)
 
         for i, row in df.iterrows():
             items = [QStandardItem(str(val)) for val in row]
