@@ -95,6 +95,8 @@ class PivotTableApp(QMainWindow):
 
     def repopulate_field_list(self):
         """Ensure the field list only contains unused fields."""
+        self.field_list.blockSignals(True) # Block signals to prevent recursion
+
         used_fields = set()
         for i in range(self.rows_list.count()):
             used_fields.add(self.rows_list.item(i).text())
@@ -107,6 +109,8 @@ class PivotTableApp(QMainWindow):
         for field in self.all_fields:
             if field not in used_fields:
                 self.field_list.addItem(QListWidgetItem(field))
+
+        self.field_list.blockSignals(False) # Unblock signals
 
     def load_csv(self):
         """Open a file dialog to load a CSV and populate the field list."""
