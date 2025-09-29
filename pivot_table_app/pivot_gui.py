@@ -31,6 +31,7 @@ class PivotTableApp(QMainWindow):
         self.layout = QHBoxLayout(self.central_widget)
         self.df = None
         self.all_fields = []
+        self.is_updating = False
 
         self.create_widgets()
         self.create_layout()
@@ -95,22 +96,28 @@ class PivotTableApp(QMainWindow):
 
     def repopulate_field_list(self):
         """Ensure the field list only contains unused fields."""
-        self.field_list.blockSignals(True) # Block signals to prevent recursion
+        if self.is_updating:
+            return # Prevent re-entrancy
 
-        used_fields = set()
-        for i in range(self.rows_list.count()):
-            used_fields.add(self.rows_list.item(i).text())
-        for i in range(self.cols_list.count()):
-            used_fields.add(self.cols_list.item(i).text())
-        for i in range(self.values_list.count()):
-            used_fields.add(self.values_list.item(i).text())
+        self.is_updating = True
+        try:
+            used_fields = set()
+            for i in range(self.rows_list.count()):
+                used_fields.add(self.rows_list.item(i).text())
+            for i in range(self.cols_list.count()):
+                used_fields.add(self.cols_list.item(i).text())
+            for i in range(self.values_list.count()):
+                used_fields.add(self.values_list.item(i).text())
 
-        self.field_list.clear()
-        for field in self.all_fields:
-            if field not in used_fields:
-                self.field_list.addItem(QListWidgetItem(field))
-
-        self.field_list.blockSignals(False) # Unblock signals
+            # Temporarily block signals on the field_list to avoid triggering more updates
+            self.field_list.blockSignals(True)
+            self.field_list.clear()
+            for field in self.all_fields:
+                if field not in used_fields:
+                    self.field_list.addItem(QListWidgetItem(field))
+            self.field_list.blockSignals(False)
+        finally:
+            self.is_updating = False # Reset the guard
 
     def load_csv(self):
         """Open a file dialog to load a CSV and populate the field list."""
