@@ -464,35 +464,141 @@ class ReportOptionsDialog(QDialog):
         }
 
 
-class CsvTableView(QTableView):
-    def __init__(self, parent=None, main_window=None):
+from PyQt6.Qsci import QsciLexerCustom
+
+class CustomSqlLexer(QsciLexerCustom):
+    def __init__(self, parent):
         super().__init__(parent)
-        self.main_window = main_window
 
-    def contextMenuEvent(self, event):
-        from PyQt6.QtWidgets import QMenu
-        menu = QMenu(self)
-        index = self.indexAt(event.pos())
+        # Define styles
+        self.STYLE_DEFAULT = 0
+        self.STYLE_PROJECTION = 1
+        self.STYLE_FILTERS = 2
+        self.STYLE_JOINS = 3
+        self.STYLE_GROUPING = 4
+        self.STYLE_SORTING = 5
+        self.STYLE_SET_OPS = 6
+        self.STYLE_SUBQUERIES = 7
+        self.STYLE_WINDOW_FUNCS = 8
+        self.STYLE_CONDITIONAL = 9
+        self.STYLE_DATABRICKS = 10
+        self.STYLE_DELTA_LAKE = 11
+        self.STYLE_FUNCTIONS = 12
+        self.STYLE_METADATA = 13
+        self.STYLE_DML = 14
+        self.STYLE_DDL = 15
+        self.STYLE_COMMENT = 16
+        self.STYLE_STRING = 17
+        self.STYLE_NUMBER = 18
 
-        if index.isValid():
-            cell_text = index.model().data(index, Qt.ItemDataRole.DisplayRole)
-            if cell_text:
-                action_text = f"Highlight cells matching '{cell_text}'"
-                # To prevent long menu items
-                if len(action_text) > 60:
-                    action_text = action_text[:57] + "..."
+        keyword_map = {
+            'select': self.STYLE_PROJECTION, 'distinct': self.STYLE_PROJECTION, 'as': self.STYLE_PROJECTION, '*': self.STYLE_PROJECTION,
+            'where': self.STYLE_FILTERS, 'limit': self.STYLE_FILTERS, 'qualify': self.STYLE_FILTERS, 'offset': self.STYLE_FILTERS, 'sample': self.STYLE_FILTERS,
+            'join': self.STYLE_JOINS, 'inner join': self.STYLE_JOINS, 'left join': self.STYLE_JOINS, 'right join': self.STYLE_JOINS, 'full join': self.STYLE_JOINS, 'cross join': self.STYLE_JOINS, 'using': self.STYLE_JOINS, 'on': self.STYLE_JOINS,
+            'group by': self.STYLE_GROUPING, 'having': self.STYLE_GROUPING, 'sum': self.STYLE_GROUPING, 'avg': self.STYLE_GROUPING, 'min': self.STYLE_GROUPING, 'max': self.STYLE_GROUPING, 'count': self.STYLE_GROUPING, 'percentile': self.STYLE_GROUPING,
+            'order by': self.STYLE_SORTING, 'asc': self.STYLE_SORTING, 'desc': self.STYLE_SORTING, 'nulls first': self.STYLE_SORTING, 'nulls last': self.STYLE_SORTING,
+            'union': self.STYLE_SET_OPS, 'union all': self.STYLE_SET_OPS, 'intersect': self.STYLE_SET_OPS, 'except': self.STYLE_SET_OPS, 'minus': self.STYLE_SET_OPS,
+            'with': self.STYLE_SUBQUERIES, 'in': self.STYLE_SUBQUERIES, 'exists': self.STYLE_SUBQUERIES, 'not exists': self.STYLE_SUBQUERIES, 'any': self.STYLE_SUBQUERIES, 'all': self.STYLE_SUBQUERIES,
+            'over': self.STYLE_WINDOW_FUNCS, 'partition by': self.STYLE_WINDOW_FUNCS, 'row_number': self.STYLE_WINDOW_FUNCS, 'rank': self.STYLE_WINDOW_FUNCS, 'lag': self.STYLE_WINDOW_FUNCS, 'lead': self.STYLE_WINDOW_FUNCS, 'first_value': self.STYLE_WINDOW_FUNCS, 'last_value': self.STYLE_WINDOW_FUNCS, 'ntile': self.STYLE_WINDOW_FUNCS,
+            'case': self.STYLE_CONDITIONAL, 'when': self.STYLE_CONDITIONAL, 'then': self.STYLE_CONDITIONAL, 'else': self.STYLE_CONDITIONAL, 'end': self.STYLE_CONDITIONAL, 'coalesce': self.STYLE_CONDITIONAL, 'nullif': self.STYLE_CONDITIONAL, 'decode': self.STYLE_CONDITIONAL,
+            'pivot': self.STYLE_DATABRICKS, 'unpivot': self.STYLE_DATABRICKS, 'explode': self.STYLE_DATABRICKS, 'posexplode': self.STYLE_DATABRICKS, 'inline': self.STYLE_DATABRICKS, 'transform': self.STYLE_DATABRICKS, 'map': self.STYLE_DATABRICKS, 'array': self.STYLE_DATABRICKS,
+            'merge into': self.STYLE_DELTA_LAKE, 'optimize': self.STYLE_DELTA_LAKE, 'zorder by': self.STYLE_DELTA_LAKE, 'vacuum': self.STYLE_DELTA_LAKE, 'timestamp as of': self.STYLE_DELTA_LAKE, 'version as of': self.STYLE_DELTA_LAKE,
+            'abs': self.STYLE_FUNCTIONS, 'round': self.STYLE_FUNCTIONS, 'upper': self.STYLE_FUNCTIONS, 'lower': self.STYLE_FUNCTIONS, 'dateadd': self.STYLE_FUNCTIONS, 'datediff': self.STYLE_FUNCTIONS, 'concat': self.STYLE_FUNCTIONS, 'regexp_extract': self.STYLE_FUNCTIONS, 'get_json_object': self.STYLE_FUNCTIONS, 'from_json': self.STYLE_FUNCTIONS,
+            'grant': self.STYLE_METADATA, 'revoke': self.STYLE_METADATA, 'show tables': self.STYLE_METADATA, 'describe table': self.STYLE_METADATA, 'describe history': self.STYLE_METADATA,
+            'insert into': self.STYLE_DML, 'insert overwrite': self.STYLE_DML, 'update': self.STYLE_DML, 'delete': self.STYLE_DML,
+            'create table': self.STYLE_DDL, 'create or replace view': self.STYLE_DDL, 'alter table': self.STYLE_DDL, 'drop table': self.STYLE_DDL, 'comment on': self.STYLE_DDL,
+        }
 
-                highlight_action = QAction(action_text, self)
-                highlight_action.triggered.connect(lambda: self.highlight_text(cell_text))
-                menu.addAction(highlight_action)
+        # Sort keywords by length, descending, to match multi-word keywords first
+        self.keywords = sorted(keyword_map.keys(), key=len, reverse=True)
+        self.keyword_styles = keyword_map
 
-        if menu.actions():
-            menu.exec(event.globalPos())
+    def language(self):
+        return "CustomSQL"
 
-    def highlight_text(self, text):
-        if self.main_window:
-            self.main_window.filter_input.setText(text)
-            self.main_window.filter_input.setFocus()
+    def description(self, style):
+        descriptions = {
+            self.STYLE_DEFAULT: "Default", self.STYLE_PROJECTION: "Projection/Retrieval",
+            self.STYLE_FILTERS: "Filters", self.STYLE_JOINS: "Joins & Relationships",
+            self.STYLE_GROUPING: "Grouping & Aggregation", self.STYLE_SORTING: "Sorting & Ordering",
+            self.STYLE_SET_OPS: "Set Operations", self.STYLE_SUBQUERIES: "Subqueries & CTEs",
+            self.STYLE_WINDOW_FUNCS: "Window / Analytic Functions", self.STYLE_CONDITIONAL: "Conditional Logic",
+            self.STYLE_DATABRICKS: "Databricks Enhancements", self.STYLE_DELTA_LAKE: "Delta Lake Operations",
+            self.STYLE_FUNCTIONS: "Functions & Expressions", self.STYLE_METADATA: "Permissions & Metadata",
+            self.STYLE_DML: "Data Modification (DML)", self.STYLE_DDL: "Schema & Object Management (DDL)",
+            self.STYLE_COMMENT: "Comment", self.STYLE_STRING: "String", self.STYLE_NUMBER: "Number"
+        }
+        return descriptions.get(style, "")
+
+    def defaultColor(self, style):
+        if style == self.STYLE_DEFAULT:
+            return QColor("#000000")
+        return QColor()
+
+    def styleText(self, start, end):
+        self.startStyling(start)
+        text = self.parent().text()
+        if not text:
+            return
+
+        text_to_style = text[start:end]
+        length = len(text_to_style)
+        i = 0
+
+        while i < length:
+            char = text_to_style[i]
+
+            # Handle comments
+            if char == '-' and i + 1 < length and text_to_style[i+1] == '-':
+                comment_end = text_to_style.find('\n', i)
+                if comment_end == -1:
+                    comment_end = length
+                comment_length = comment_end - i
+                self.setStyling(comment_length, self.STYLE_COMMENT)
+                i += comment_length
+                continue
+
+            # Handle strings
+            if char == "'":
+                string_end = i + 1
+                while string_end < length:
+                    if text_to_style[string_end] == "'":
+                        break
+                    string_end += 1
+                string_length = (string_end - i) + 1
+                self.setStyling(string_length, self.STYLE_STRING)
+                i += string_length
+                continue
+
+            # Handle numbers
+            if char.isdigit():
+                num_end = i
+                while num_end < length and (text_to_style[num_end].isdigit() or text_to_style[num_end] == '.'):
+                    num_end += 1
+                num_length = num_end - i
+                self.setStyling(num_length, self.STYLE_NUMBER)
+                i += num_length
+                continue
+
+            # Handle keywords
+            found_keyword = False
+            for keyword in self.keywords:
+                kw_len = len(keyword)
+                # Check for word boundary
+                if (text_to_style[i:i+kw_len].lower() == keyword and
+                    (i + kw_len >= length or not text_to_style[i+kw_len].isalnum())):
+                    style = self.keyword_styles[keyword]
+                    self.setStyling(kw_len, style)
+                    i += kw_len
+                    found_keyword = True
+                    break
+
+            if found_keyword:
+                continue
+
+            # Default for whitespace and other symbols
+            self.setStyling(1, self.STYLE_DEFAULT)
+            i += 1
 
 
 class MainWindow(QMainWindow):
@@ -672,7 +778,7 @@ class MainWindow(QMainWindow):
                 tab_name = os.path.basename(file_path)
                 if file_path.lower().endswith('.csv'):
                     df = pd.read_csv(file_path, delimiter=",", encoding='utf-8')
-                    table_view = CsvTableView(main_window=self)
+                    table_view = QTableView()
                     proxy_model = HighlightProxyModel(table_view)
                     pandas_model = PandasModel(df)
                     proxy_model.setSourceModel(pandas_model)
@@ -729,9 +835,43 @@ class MainWindow(QMainWindow):
         editor.setMarginWidth(0, fontmetrics.horizontalAdvance('00000') + 6)
         editor.setMarginLineNumbers(0, True)
 
-        lexer = QsciLexerSQL(editor)
-        lexer.setDefaultFont(font)
+        lexer = CustomSqlLexer(editor)
         editor.setLexer(lexer)
+
+        # --- Configure colors for the custom lexer styles ---
+        lexer.setColor(QColor("#000000"), lexer.STYLE_DEFAULT)
+        lexer.setColor(QColor("#4CAF50"), lexer.STYLE_PROJECTION)
+        lexer.setColor(QColor("#F44336"), lexer.STYLE_FILTERS)
+        lexer.setColor(QColor("#2196F3"), lexer.STYLE_JOINS)
+        lexer.setColor(QColor("#9C27B0"), lexer.STYLE_GROUPING)
+        lexer.setColor(QColor("#FF9800"), lexer.STYLE_SORTING)
+        lexer.setColor(QColor("#795548"), lexer.STYLE_SET_OPS)
+        lexer.setColor(QColor("#00BCD4"), lexer.STYLE_SUBQUERIES)
+        lexer.setColor(QColor("#E91E63"), lexer.STYLE_WINDOW_FUNCS)
+        lexer.setColor(QColor("#607D8B"), lexer.STYLE_CONDITIONAL)
+        lexer.setColor(QColor("#8BC34A"), lexer.STYLE_DATABRICKS)
+        lexer.setColor(QColor("#FF5722"), lexer.STYLE_DELTA_LAKE)
+        lexer.setColor(QColor("#9E9E9E"), lexer.STYLE_FUNCTIONS)
+        lexer.setColor(QColor("#3F51B5"), lexer.STYLE_METADATA)
+        lexer.setColor(QColor("#CDDC39"), lexer.STYLE_DML)
+        lexer.setColor(QColor("#FFC107"), lexer.STYLE_DDL)
+        lexer.setColor(QColor("#008000"), lexer.STYLE_COMMENT)
+        lexer.setColor(QColor("#A31515"), lexer.STYLE_STRING)
+        lexer.setColor(QColor("#0000FF"), lexer.STYLE_NUMBER)
+
+        # --- Configure fonts ---
+        bold_font = QFont(font)
+        bold_font.setBold(True)
+        for style_num in range(1, 16):  # Keyword styles are 1-15
+            lexer.setFont(bold_font, style_num)
+
+        comment_font = QFont(font)
+        comment_font.setItalic(True)
+        lexer.setFont(comment_font, lexer.STYLE_COMMENT)
+
+        lexer.setFont(font, lexer.STYLE_DEFAULT)
+        lexer.setFont(font, lexer.STYLE_STRING)
+        lexer.setFont(font, lexer.STYLE_NUMBER)
 
         # Indicator for highlighting all occurrences of the selected word.
         self.word_highlight_indicator = 8  # Use indicator 8
@@ -829,13 +969,13 @@ class MainWindow(QMainWindow):
         if tab_data.get('type') == 'csv':
             proxy_model = tab_data['proxy_model']
 
-            # Always set the highlight text.
-            proxy_model.set_highlight_text(text)
-
-            # The checkbox now only toggles whether non-matching rows are filtered out.
             if self.highlight_only_check.isChecked():
+                # When highlighting, clear the row filter and set the highlight text.
                 proxy_model.setFilterRegularExpression("")
+                proxy_model.set_highlight_text(text)
             else:
+                # When filtering, clear the highlight and apply the row filter.
+                proxy_model.set_highlight_text("")
                 proxy_model.setFilterRegularExpression(text)
 
         elif tab_data.get('type') == 'sql':
