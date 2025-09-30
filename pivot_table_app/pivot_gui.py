@@ -41,32 +41,25 @@ class FieldListWidget(QListWidget):
             drag.exec(Qt.MoveAction)
 
 class DropListWidget(QListWidget):
-    """A QListWidget that accepts plain text drops."""
+    """A QListWidget that can accept plain text drops from FieldListWidget
+    while retaining default drag-and-drop behavior for internal moves."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAcceptDrops(True)
-        self.setDragDropMode(QAbstractItemView.DragDrop)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-        else:
-            super().dragEnterEvent(event)
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-        else:
-            super().dragMoveEvent(event)
 
     def dropEvent(self, event):
-        if event.mimeData().hasText():
-            # Ensure the item is not a duplicate
-            field_name = event.mimeData().text()
-            if not self.findItems(field_name, Qt.MatchExactly):
-                self.addItem(field_name)
-            event.acceptProposedAction()
+        # Check if the source of the drag is our specific FieldListWidget
+        if isinstance(event.source(), FieldListWidget):
+            if event.mimeData().hasText():
+                field_name = event.mimeData().text()
+                if not self.findItems(field_name, Qt.MatchExactly):
+                    self.addItem(field_name)
+                event.acceptProposedAction()
+            else:
+                event.ignore()
         else:
+            # If the source is not FieldListWidget (e.g., it's self or another
+            # DropListWidget), fall back to the default QListWidget implementation
+            # which correctly handles moving and reordering items.
             super().dropEvent(event)
 
 class ValuesTableWidget(QTableWidget):
