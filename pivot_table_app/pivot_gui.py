@@ -1,20 +1,21 @@
 import sys
 import pandas as pd
+from functools import partial
 from PySide6.QtCore import Qt, QMimeData, Signal
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QDrag, QFont, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QTableView, QPushButton, QFileDialog, QListWidgetItem,
     QAbstractItemView, QLabel, QComboBox, QMessageBox, QTableWidget,
-    QTableWidgetItem, QHeaderView, QCheckBox, QDialog, QDialogButtonBox
+    QTableWidgetItem, QHeaderView, QCheckBox, QDialog, QDialogButtonBox, QMenu
 )
 
 class FieldList(QListWidget):
     """ The main list of available fields. Only allows dragging out (copying). """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setDragEnabled(True)
-        self.setDragDropMode(QAbstractItemView.DragOnly)
+        self.setDragEnabled(False)
+        self.setDragDropMode(QAbstractItemView.NoDragDrop)
 
     def startDrag(self, supportedActions):
         item = self.currentItem()
@@ -27,13 +28,11 @@ class FieldList(QListWidget):
 
 class DropList(QListWidget):
     """ A list that can accept drops and allows items to be moved out of it. """
-    items_changed = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setDragDropMode(QAbstractItemView.DragDrop)
-        self.setDefaultDropAction(Qt.MoveAction)
+        self.setDragEnabled(False)
+        self.setAcceptDrops(False)
+        self.setDragDropMode(QAbstractItemView.NoDragDrop)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
@@ -71,13 +70,10 @@ class DropList(QListWidget):
         if isinstance(source, DropList):
             source.takeItem(source.row(source.currentItem()))
 
-        self.items_changed.emit()
-
 class ValuesTable(QTableWidget):
-    items_changed = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAcceptDrops(True)
+        self.setAcceptDrops(False)
         self.setColumnCount(2)
         self.setHorizontalHeaderLabels(["Field", "Aggregation"])
         self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -110,7 +106,6 @@ class ValuesTable(QTableWidget):
         combo = QComboBox()
         combo.addItems(['sum', 'mean', 'count', 'min', 'max'])
         self.setCellWidget(row_position, 1, combo)
-        self.items_changed.emit()
 
     def get_fields_and_aggs(self):
         fields, aggs = [], {}
@@ -161,10 +156,12 @@ class PivotTableApp(QMainWindow):
         self.filters_list.itemDoubleClicked.connect(self.open_filter_dialog)
         self.values_table = ValuesTable()
 
-        self.rows_list.items_changed.connect(self.repopulate_field_list)
-        self.cols_list.items_changed.connect(self.repopulate_field_list)
-        self.filters_list.items_changed.connect(self.repopulate_field_list)
-        self.values_table.items_changed.connect(self.repopulate_field_list)
+        # Setup context menus
+        self.field_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.field_list.customContextMenuRequested.connect(self.show_field_list_context_menu)
+        for list_widget in [self.rows_list, self.cols_list, self.filters_list]:
+            list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+            list_widget.customContextMenuRequested.connect(partial(self.show_group_list_context_menu, list_widget))
 
         self.totals_checkbox = QCheckBox("Show Grand Totals")
         self.totals_checkbox.setChecked(True)
@@ -198,18 +195,31 @@ class PivotTableApp(QMainWindow):
         main_layout.addLayout(config_layout, 1)
         main_layout.addLayout(table_layout, 4)
 
-    def repopulate_field_list(self):
-        used_fields = set()
-        for i in range(self.rows_list.count()): used_fields.add(self.rows_list.item(i).text())
-        for i in range(self.cols_list.count()): used_fields.add(self.cols_list.item(i).text())
-        for i in range(self.filters_list.count()): used_fields.add(self.filters_list.item(i).text())
-        value_fields, _ = self.values_table.get_fields_and_aggs()
-        used_fields.update(value_fields)
+    def add_item_to_list(self, item_text, list_widget):
+        if not list_widget.findItems(item_text, Qt.MatchExactly):
+            list_widget.addItem(item_text)
 
-        self.field_list.clear()
-        for field in self.all_fields:
-            if field not in used_fields:
-                self.field_list.addItem(field)
+    def show_field_list_context_menu(self, pos):
+        item = self.field_list.itemAt(pos)
+        if not item:
+            return
+
+        item_text = item.text()
+        menu = QMenu()
+        menu.addAction("Add to Rows", partial(self.add_item_to_list, item_text, self.rows_list))
+        menu.addAction("Add to Columns", partial(self.add_item_to_list, item_text, self.cols_list))
+        menu.addAction("Add to Filters", partial(self.add_item_to_list, item_text, self.filters_list))
+        menu.addAction("Add to Values", partial(self.values_table.add_field, item_text))
+        menu.exec(self.field_list.mapToGlobal(pos))
+
+    def show_group_list_context_menu(self, list_widget, pos):
+        item = list_widget.itemAt(pos)
+        if not item:
+            return
+
+        menu = QMenu()
+        menu.addAction("Remove", lambda: list_widget.takeItem(list_widget.row(item)))
+        menu.exec(list_widget.mapToGlobal(pos))
 
     def load_csv(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load CSV", "", "CSV files (*.csv)")
@@ -217,9 +227,10 @@ class PivotTableApp(QMainWindow):
             try:
                 self.df = pd.read_csv(path)
                 self.all_fields = self.df.columns.tolist()
+                self.field_list.clear()
+                self.field_list.addItems(self.all_fields)
                 for w in [self.rows_list, self.cols_list, self.filters_list]: w.clear()
                 self.values_table.setRowCount(0)
-                self.repopulate_field_list()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load CSV: {e}")
 
