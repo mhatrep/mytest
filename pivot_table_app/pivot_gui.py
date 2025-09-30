@@ -150,6 +150,7 @@ class PivotTableApp(QMainWindow):
 
     def create_layout(self):
         config_layout = QVBoxLayout()
+        config_layout.addWidget(self.load_button)
         config_layout.addWidget(QLabel("Fields (Drag from here)"))
         config_layout.addWidget(self.field_list)
         config_layout.addWidget(QLabel("Filters (Double-click to edit)"))
