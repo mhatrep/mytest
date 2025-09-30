@@ -1,35 +1,23 @@
 import sys
 import pandas as pd
-from PySide6.QtCore import Qt
-from PySide6.QtCore import Qt, Signal, QMimeData
+from PySide6.QtCore import Qt, QMimeData, Signal
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QDrag, QFont, QColor
 from PySide6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QListWidget,
-    QTableView,
-    QPushButton,
-    QFileDialog,
-    QListWidgetItem,
-    QAbstractItemView,
-    QLabel,
-    QComboBox,
-    QMessageBox,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-    QCheckBox,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QListWidget, QTableView, QPushButton, QFileDialog, QListWidgetItem,
+    QAbstractItemView, QLabel, QComboBox, QMessageBox, QTableWidget,
+    QTableWidgetItem, QHeaderView, QCheckBox, QDialog, QDialogButtonBox
 )
 
-class FieldListWidget(QListWidget):
-    """A QListWidget that starts a drag with plain text MIME data."""
+class DraggableListWidget(QListWidget):
+    """A universal QListWidget that handles dragging as plain text and can
+    accept drops from itself or other DraggableListWidgets."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setDragEnabled(True)
-        self.setDragDropMode(QAbstractItemView.DragOnly)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self.setDefaultDropAction(Qt.MoveAction)
 
     def startDrag(self, supportedActions):
         item = self.currentItem()
@@ -38,29 +26,8 @@ class FieldListWidget(QListWidget):
             mimeData.setText(item.text())
             drag = QDrag(self)
             drag.setMimeData(mimeData)
-            drag.exec(Qt.MoveAction)
-
-class DropListWidget(QListWidget):
-    """A QListWidget that can accept plain text drops from FieldListWidget
-    while retaining default drag-and-drop behavior for internal moves."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-    def dropEvent(self, event):
-        # Check if the source of the drag is our specific FieldListWidget
-        if isinstance(event.source(), FieldListWidget):
-            if event.mimeData().hasText():
-                field_name = event.mimeData().text()
-                if not self.findItems(field_name, Qt.MatchExactly):
-                    self.addItem(field_name)
-                event.acceptProposedAction()
-            else:
-                event.ignore()
-        else:
-            # If the source is not FieldListWidget (e.g., it's self or another
-            # DropListWidget), fall back to the default QListWidget implementation
-            # which correctly handles moving and reordering items.
-            super().dropEvent(event)
+            if drag.exec(supportedActions) == Qt.MoveAction:
+                self.takeItem(self.row(item))
 
 class ValuesTableWidget(QTableWidget):
     """A QTableWidget customized for handling value fields and their aggregations."""
@@ -81,48 +48,56 @@ class ValuesTableWidget(QTableWidget):
         else:
             event.ignore()
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
     def dropEvent(self, event):
         if event.mimeData().hasText():
             field_name = event.mimeData().text()
             self.add_field(field_name)
             event.acceptProposedAction()
+            if isinstance(event.source(), QListWidget):
+                 event.source().takeItem(event.source().currentRow())
         else:
             event.ignore()
 
     def add_field(self, field_name):
-        """Adds a new field to the table if it's not already present."""
-        for row in range(self.rowCount()):
-            if self.item(row, 0).text() == field_name:
-                return  # Avoid duplicates
-
+        if any(self.item(row, 0).text() == field_name for row in range(self.rowCount())):
+            return
         row_position = self.rowCount()
         self.insertRow(row_position)
-
-        field_item = QTableWidgetItem(field_name)
-        self.setItem(row_position, 0, field_item)
-
+        self.setItem(row_position, 0, QTableWidgetItem(field_name))
         agg_combo = QComboBox()
         agg_combo.addItems(['sum', 'mean', 'count', 'min', 'max'])
         self.setCellWidget(row_position, 1, agg_combo)
         self.items_changed.emit()
 
     def get_fields_and_aggs(self):
-        """Returns a tuple of (list_of_fields, dict_of_aggregations)."""
-        fields = []
-        aggs = {}
+        fields, aggs = [], {}
         for row in range(self.rowCount()):
-            field = self.item(row, 0).text()
-            agg_combo = self.cellWidget(row, 1)
-            agg = agg_combo.currentText()
+            field, agg = self.item(row, 0).text(), self.cellWidget(row, 1).currentText()
             fields.append(field)
             aggs[field] = agg
         return fields, aggs
+
+class FilterDialog(QDialog):
+    """Dialog to select values for filtering a field."""
+    def __init__(self, field_name, values, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Filter {field_name}")
+        layout = QVBoxLayout(self)
+        self.list_widget = QListWidget()
+        self.list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        for val in values:
+            item = QListWidgetItem(str(val))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.list_widget.addItem(item)
+        layout.addWidget(self.list_widget)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def get_selected_values(self):
+        return [self.list_widget.item(i).text() for i in range(self.list_widget.count()) if self.list_widget.item(i).checkState() == Qt.Checked]
 
 class PivotTableApp(QMainWindow):
     """Main application window for the Pivot Table tool."""
@@ -130,59 +105,43 @@ class PivotTableApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Pivot Table Application")
         self.setGeometry(100, 100, 1200, 800)
-
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.layout = QHBoxLayout(self.central_widget)
         self.df = None
         self.all_fields = []
-        self.is_updating = False
-
+        self.filters = {}
         self.create_widgets()
         self.create_layout()
 
     def create_widgets(self):
-        """Create and configure all widgets for the application."""
-        def setup_list_widget(list_widget):
-            """Configure a QListWidget with drag and drop properties."""
-            list_widget.setDragEnabled(True)
-            list_widget.setAcceptDrops(True)
-            list_widget.setDragDropMode(QAbstractItemView.DragDrop)
-            list_widget.setDefaultDropAction(Qt.MoveAction)
-            list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
-
-        self.field_list = FieldListWidget()
-
-        self.rows_list = DropListWidget()
-        setup_list_widget(self.rows_list)
-
-        self.cols_list = DropListWidget()
-        setup_list_widget(self.cols_list)
-
+        self.field_list = DraggableListWidget()
+        self.field_list.setDragDropMode(QAbstractItemView.DragOnly)
+        self.rows_list = DraggableListWidget()
+        self.cols_list = DraggableListWidget()
+        self.filters_list = DraggableListWidget()
+        self.filters_list.itemDoubleClicked.connect(self.open_filter_dialog)
         self.values_table = ValuesTableWidget()
 
-        # Connect signals to repopulate the field list whenever items change
-        for list_widget in [self.field_list, self.rows_list, self.cols_list]:
-            list_widget.model().rowsInserted.connect(self.repopulate_field_list)
-            list_widget.model().rowsRemoved.connect(self.repopulate_field_list)
+        for w in [self.rows_list, self.cols_list, self.filters_list]:
+            w.model().rowsInserted.connect(self.repopulate_field_list)
+            w.model().rowsRemoved.connect(self.repopulate_field_list)
         self.values_table.items_changed.connect(self.repopulate_field_list)
 
         self.totals_checkbox = QCheckBox("Show Grand Totals")
         self.totals_checkbox.setChecked(True)
-
         self.table_view = QTableView()
         self.load_button = QPushButton("Load CSV")
         self.load_button.clicked.connect(self.load_csv)
-
         self.pivot_button = QPushButton("Create Pivot Table")
         self.pivot_button.clicked.connect(self.create_pivot_table)
 
     def create_layout(self):
-        """Set up the layout for the main window."""
         config_layout = QVBoxLayout()
         config_layout.addWidget(self.load_button)
         config_layout.addWidget(QLabel("Fields"))
         config_layout.addWidget(self.field_list)
+        config_layout.addWidget(QLabel("Filters (Double-click to edit)"))
+        config_layout.addWidget(self.filters_list)
         config_layout.addWidget(QLabel("Rows"))
         config_layout.addWidget(self.rows_list)
         config_layout.addWidget(QLabel("Columns"))
@@ -191,55 +150,56 @@ class PivotTableApp(QMainWindow):
         config_layout.addWidget(self.values_table)
         config_layout.addWidget(self.totals_checkbox)
         config_layout.addWidget(self.pivot_button)
+        config_layout.addStretch()
 
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.table_view)
+        table_layout = QVBoxLayout()
+        table_layout.addWidget(self.table_view)
 
-        self.layout.addLayout(config_layout, 1)
-        self.layout.addLayout(main_layout, 4)
+        main_layout = QHBoxLayout(self.central_widget)
+        main_layout.addLayout(config_layout, 1)
+        main_layout.addLayout(table_layout, 4)
 
     def repopulate_field_list(self):
-        """Ensure the field list only contains unused fields."""
-        if self.is_updating:
-            return  # Prevent re-entrancy
+        used_fields = set()
+        for i in range(self.rows_list.count()): used_fields.add(self.rows_list.item(i).text())
+        for i in range(self.cols_list.count()): used_fields.add(self.cols_list.item(i).text())
+        for i in range(self.filters_list.count()): used_fields.add(self.filters_list.item(i).text())
+        value_fields, _ = self.values_table.get_fields_and_aggs()
+        used_fields.update(value_fields)
 
-        self.is_updating = True
-        try:
-            used_fields = set()
-            for i in range(self.rows_list.count()):
-                used_fields.add(self.rows_list.item(i).text())
-            for i in range(self.cols_list.count()):
-                used_fields.add(self.cols_list.item(i).text())
-
-            value_fields, _ = self.values_table.get_fields_and_aggs()
-            for field in value_fields:
-                used_fields.add(field)
-
-            self.field_list.blockSignals(True)
-            self.field_list.clear()
-            for field in self.all_fields:
-                if field not in used_fields:
-                    self.field_list.addItem(QListWidgetItem(field))
-            self.field_list.blockSignals(False)
-        finally:
-            self.is_updating = False
+        self.field_list.blockSignals(True)
+        self.field_list.clear()
+        for field in self.all_fields:
+            if field not in used_fields:
+                self.field_list.addItem(field)
+        self.field_list.blockSignals(False)
 
     def load_csv(self):
-        """Open a file dialog to load a CSV and populate the field list."""
         path, _ = QFileDialog.getOpenFileName(self, "Load CSV", "", "CSV files (*.csv)")
         if path:
             try:
                 self.df = pd.read_csv(path)
                 self.all_fields = self.df.columns.tolist()
-                self.rows_list.clear()
-                self.cols_list.clear()
+                for w in [self.rows_list, self.cols_list, self.filters_list]: w.clear()
                 self.values_table.setRowCount(0)
                 self.repopulate_field_list()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load CSV: {e}")
 
+    def open_filter_dialog(self, item):
+        field_name = item.text()
+        if self.df is None: return
+        unique_values = sorted(self.df[field_name].unique())
+        dialog = FilterDialog(field_name, unique_values, self)
+        if dialog.exec():
+            self.filters[field_name] = dialog.get_selected_values()
+            item.setForeground(QColor("blue")) # Mark as filtered
+        else:
+            if field_name in self.filters:
+                del self.filters[field_name]
+                item.setForeground(QApplication.style().standardPalette().color(self.foregroundRole()))
+
     def create_pivot_table(self):
-        """Generate and display the pivot table based on user selections."""
         if self.df is None:
             QMessageBox.warning(self, "Warning", "Please load a CSV file first.")
             return
@@ -248,45 +208,46 @@ class PivotTableApp(QMainWindow):
         cols = [self.cols_list.item(i).text() for i in range(self.cols_list.count())]
         values, aggfunc = self.values_table.get_fields_and_aggs()
 
-        if not rows or not values:
-            QMessageBox.warning(self, "Warning", "Please define at least one row and one value.")
+        if not rows and not cols:
+            QMessageBox.warning(self, "Warning", "Please define at least one row or column.")
             return
 
         try:
-            margins = self.totals_checkbox.isChecked()
-            pivot_table = self.df.pivot_table(index=rows, columns=cols, values=values, aggfunc=aggfunc,
-                                              margins=margins, margins_name='Grand Total')
-            self.display_df(pivot_table.reset_index())
+            filtered_df = self.df.copy()
+            if self.filters:
+                for field, selected_values in self.filters.items():
+                    # Ensure correct type for comparison if necessary
+                    if pd.api.types.is_numeric_dtype(filtered_df[field]):
+                        selected_values = pd.to_numeric(selected_values, errors='coerce')
+                    filtered_df = filtered_df[filtered_df[field].isin(selected_values)]
+
+            pivot_table = filtered_df.pivot_table(index=rows, columns=cols, values=values, aggfunc=aggfunc,
+                                                  margins=self.totals_checkbox.isChecked(), margins_name='Grand Total')
+            self.display_df(pivot_table)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create pivot table: {e}")
 
     def display_df(self, df):
-        """Display a pandas DataFrame in the QTableView with styling and autofitting."""
-        model = QStandardItemModel()
+        if df.index.name is not None or (isinstance(df.index, pd.MultiIndex) and any(name is not None for name in df.index.names)):
+            df = df.reset_index()
 
-        # Set bold font for headers
-        font = QFont()
-        font.setBold(True)
-        model.horizontalHeaderItem(0)
+        model = QStandardItemModel()
+        font = QFont(); font.setBold(True)
         self.table_view.horizontalHeader().setFont(font)
 
         if isinstance(df.columns, pd.MultiIndex):
             headers = ['_'.join(map(str, col)).strip('_') for col in df.columns.values]
         else:
             headers = df.columns.tolist()
-
         df.columns = headers
         model.setHorizontalHeaderLabels(headers)
 
-        # Define the color for totals
         total_color = QColor(220, 220, 220)
-
-        for i, row in df.iterrows():
+        for i in range(df.shape[0]):
             items = []
-            is_total_row = 'Grand Total' in row.values
-            for col_idx, val in enumerate(row):
+            is_total_row = 'Grand Total' in df.iloc[i].values
+            for col_idx, val in enumerate(df.iloc[i].values):
                 item = QStandardItem(str(val))
-                # Style the cell if it's in a total row or total column
                 if is_total_row or 'Grand Total' in headers[col_idx]:
                     item.setBackground(total_color)
                 items.append(item)
