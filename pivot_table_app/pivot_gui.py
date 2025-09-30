@@ -71,6 +71,7 @@ class DropList(QListWidget):
             source.takeItem(source.row(source.currentItem()))
 
 class ValuesTable(QTableWidget):
+    values_changed = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(False)
@@ -105,7 +106,9 @@ class ValuesTable(QTableWidget):
         self.setItem(row_position, 0, QTableWidgetItem(field_name))
         combo = QComboBox()
         combo.addItems(['sum', 'mean', 'count', 'min', 'max'])
+        combo.currentTextChanged.connect(self.values_changed.emit)
         self.setCellWidget(row_position, 1, combo)
+        self.values_changed.emit()
 
     def get_fields_and_aggs(self):
         fields, aggs = [], {}
@@ -170,6 +173,16 @@ class PivotTableApp(QMainWindow):
         self.load_button.clicked.connect(self.load_csv)
         self.pivot_button = QPushButton("Create Pivot Table")
         self.pivot_button.clicked.connect(self.create_pivot_table)
+
+        # Connect signals for automatic updates
+        self.rows_list.model().rowsInserted.connect(self.create_pivot_table)
+        self.rows_list.model().rowsRemoved.connect(self.create_pivot_table)
+        self.cols_list.model().rowsInserted.connect(self.create_pivot_table)
+        self.cols_list.model().rowsRemoved.connect(self.create_pivot_table)
+        self.filters_list.model().rowsInserted.connect(self.create_pivot_table)
+        self.filters_list.model().rowsRemoved.connect(self.create_pivot_table)
+        self.totals_checkbox.stateChanged.connect(self.create_pivot_table)
+        self.values_table.values_changed.connect(self.create_pivot_table)
 
     def create_layout(self):
         config_layout = QVBoxLayout()
@@ -242,10 +255,12 @@ class PivotTableApp(QMainWindow):
         if dialog.exec():
             self.filters[field_name] = dialog.get_selected_values()
             item.setForeground(QColor("blue"))
+            self.create_pivot_table()
         else:
             if field_name in self.filters:
                 del self.filters[field_name]
                 item.setForeground(QApplication.style().standardPalette().color(self.foregroundRole()))
+                self.create_pivot_table()
 
     def create_pivot_table(self):
         if self.df is None: return QMessageBox.warning(self, "Warning", "Please load a CSV file first.")
