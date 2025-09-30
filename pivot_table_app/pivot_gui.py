@@ -42,10 +42,32 @@ class DropList(QListWidget):
             event.ignore()
 
     def dropEvent(self, event):
-        if event.mimeData().hasText():
-            # This allows drops from FieldList (copy) and other DropLists (move)
+        if not event.mimeData().hasText():
+            event.ignore()
+            return
+
+        source = event.source()
+
+        # Handle reordering within the same list
+        if source == self:
             super().dropEvent(event)
-            self.items_changed.emit()
+            return
+
+        item_text = event.mimeData().text()
+
+        # Prevent duplicates
+        if self.findItems(item_text, Qt.MatchExactly):
+            event.ignore()
+            return
+
+        # Call super to handle the drop (adds the item)
+        super().dropEvent(event)
+
+        # If the source is another DropList, remove the item from it to complete the "move"
+        if isinstance(source, DropList):
+            source.takeItem(source.row(source.currentItem()))
+
+        self.items_changed.emit()
 
 class ValuesTable(QTableWidget):
     items_changed = Signal()
