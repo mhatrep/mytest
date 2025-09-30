@@ -60,9 +60,12 @@ class DropList(QListWidget):
             event.ignore()
             return
 
-        # Call super to handle the drop (adds the item)
-        super().dropEvent(event)
-        event.acceptProposedAction() # Accept the drop
+        # Accept the event before making changes.
+        event.acceptProposedAction()
+
+        # Manually add the item text. This is safer than calling super().dropEvent(),
+        # which can have complex side-effects.
+        self.addItem(item_text)
 
         # If the source is another DropList, remove the item from it to complete the "move"
         if isinstance(source, DropList):
