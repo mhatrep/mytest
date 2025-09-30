@@ -37,7 +37,7 @@ class DropList(QListWidget):
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
-            event.accept()
+            event.acceptProposedAction()
         else:
             event.ignore()
 
@@ -62,6 +62,7 @@ class DropList(QListWidget):
 
         # Call super to handle the drop (adds the item)
         super().dropEvent(event)
+        event.acceptProposedAction() # Accept the drop
 
         # If the source is another DropList, remove the item from it to complete the "move"
         if isinstance(source, DropList):
