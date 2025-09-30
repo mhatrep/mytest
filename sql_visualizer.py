@@ -58,16 +58,8 @@ class MainFrame(wx.Frame):
             for join in parsed.find_all(exp.Join):
                 target_table = join.this.name
                 join_type = join.args.get('kind', 'INNER')
-                join_condition = str(join.on)
-                dot.edge(source_table, target_table, label=f'{join_type} JOIN\n({join_condition})')
+                dot.edge(source_table, target_table, label=f'{join_type} JOIN')
                 source_table = target_table # For subsequent joins
-
-            # Add where clause
-            where_clause = parsed.find(exp.Where)
-            if where_clause:
-                where_condition = str(where_clause.this)
-                dot.node('filter', f'WHERE\n{where_condition}', shape='diamond')
-                dot.edge(source_table, 'filter', style='dashed')
 
             # Render and display the graph
             graph_path = dot.render('sql_graph', format='png', cleanup=True, view=False)
