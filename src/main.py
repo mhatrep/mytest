@@ -4,6 +4,7 @@ from PyQt6.QtGui import QAction, QUndoStack
 from PyQt6.QtCore import Qt, QDate
 from models.date_tree_model import DateTreeModel
 from views.kanban_board import KanbanBoard
+from commands import RescheduleNoteCommand
 import data_manager
 
 class MainWindow(QMainWindow):
@@ -13,6 +14,7 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         self.current_date = QDate.currentDate()
         self.undo_stack = QUndoStack(self)
+        self.data = data_manager.load_data()
 
         # Create the splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -38,6 +40,10 @@ class MainWindow(QMainWindow):
         # Set initial sizes
         self.splitter.setSizes([200, 1000])
         self.load_board_for_date(self.current_date)
+
+    def closeEvent(self, event):
+        data_manager.save_data(self.data)
+        event.accept()
 
     def create_menus(self):
         menu_bar = self.menuBar()
@@ -76,12 +82,13 @@ class MainWindow(QMainWindow):
                 self.date_tree_model.add_days(item, year, month)
 
     def load_board_for_date(self, date):
-        notes = data_manager.get_notes_for_date(date)
+        date_str = date.toString("yyyy-MM-dd")
+        notes = self.data.get(date_str, {})
         self.kanban_board.load_notes(notes)
 
-    def save_current_board(self):
-        notes = self.kanban_board.get_notes()
-        data_manager.save_notes_for_date(self.current_date, notes)
+    def sync_data_from_board(self):
+        date_str = self.current_date.toString("yyyy-MM-dd")
+        self.data[date_str] = self.kanban_board.get_notes()
 
     def tree_drag_enter_event(self, event):
         if event.mimeData().hasFormat("application/x-qabstractitemmodeldatalist"):
@@ -114,18 +121,29 @@ class MainWindow(QMainWindow):
         event.accept()
 
         dragged_item = source_list.selectedItems()[0]
+        source_row = source_list.row(dragged_item)
         note_widget = source_list.itemWidget(dragged_item)
-        title = note_widget.title_label.text()
-        description = note_widget.description_label.text()
+        note_data = {
+            "title": note_widget.title_label.text(),
+            "description": note_widget.description_label.text(),
+            "color": note_widget.color,
+        }
 
-        target_notes = data_manager.get_notes_for_date(target_date)
-        if "Backlog" not in target_notes:
-            target_notes["Backlog"] = []
-        target_notes["Backlog"].append({"title": title, "description": description})
-        data_manager.save_notes_for_date(target_date, target_notes)
+        source_column_name = ""
+        for name, column in self.kanban_board.columns.items():
+            if column is source_list:
+                source_column_name = name
+                break
 
-        source_list.takeItem(source_list.row(dragged_item))
-        self.save_current_board()
+        command = RescheduleNoteCommand(
+            main_window=self,
+            source_column_name=source_column_name,
+            source_row=source_row,
+            note_data=note_data,
+            source_date=self.current_date,
+            target_date=target_date,
+        )
+        self.undo_stack.push(command)
 
 
 if __name__ == "__main__":

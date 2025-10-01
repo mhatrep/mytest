@@ -1,7 +1,8 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLabel, QPushButton, QMenu
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidgetItem, QLabel, QPushButton, QMenu
 from PyQt6.QtCore import Qt, QSize
 from components.note_dialog import NoteDialog
 from components.note_widget import NoteWidget
+from components.droppable_list_widget import DroppableListWidget
 from commands import AddNoteCommand, EditNoteCommand, DeleteNoteCommand
 
 class KanbanBoard(QWidget):
@@ -27,13 +28,9 @@ class KanbanBoard(QWidget):
             add_button.clicked.connect(lambda _, n=name: self.add_note(n))
             column_layout.addWidget(add_button)
 
-            list_widget = QListWidget()
-            list_widget.setDragDropMode(QListWidget.DragDropMode.DragDrop)
-            list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
-            list_widget.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+            list_widget = DroppableListWidget(self.main_window, name)
             list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             list_widget.customContextMenuRequested.connect(self.show_context_menu)
-            list_widget.model().rowsMoved.connect(self.main_window.save_current_board)
             column_layout.addWidget(list_widget)
 
             self.columns[name] = list_widget
