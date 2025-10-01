@@ -16,6 +16,7 @@ class MainWindow(QMainWindow):
         self.current_date = QDate.currentDate()
         self.undo_stack = QUndoStack(self)
         self.data = data_manager.load_data()
+        self.drag_source_list = None
         self.load_settings()
 
         # Create the splitter
