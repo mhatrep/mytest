@@ -69,10 +69,12 @@ class MainWindow(QMainWindow):
     def load_settings(self):
         settings = self.data.get("settings", {})
         font_str = settings.get("font")
+        font = QFont()
         if font_str:
-            font = QFont()
             font.fromString(font_str)
-            QApplication.instance().setFont(font)
+        else:
+            font.setPointSize(14)
+        QApplication.instance().setFont(font)
 
     def save_settings(self):
         if "settings" not in self.data:

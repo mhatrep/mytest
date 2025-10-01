@@ -38,8 +38,8 @@ class DroppableListWidget(QListWidget):
                 event.ignore()
                 return
 
-            # Prevent default drop logic, command will handle it
-            event.ignore()
+            # Accept the event to override default behavior
+            event.accept()
 
             from commands import MoveNoteCommand
             command = MoveNoteCommand(

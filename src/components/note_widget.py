@@ -39,7 +39,7 @@ class NoteWidget(QWidget):
     def set_color(self, color):
         self.color = color
         self.setStyleSheet(f"""
-            QWidget {{
+            NoteWidget {{
                 background-color: {self.color};
                 border: 1px solid #ccc;
                 border-radius: 5px;
