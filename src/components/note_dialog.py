@@ -19,6 +19,7 @@ class NoteDialog(QDialog):
 
 
         self.selected_color = color
+        self.color_buttons = {}
         self.create_color_palette()
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -44,16 +45,23 @@ class NoteDialog(QDialog):
         color_widget.setLayout(color_layout)
         self.layout.addWidget(color_widget)
 
-        colors = ["#ffffa0", "#a0c4ff", "#b2f7a0", "#f7a0b2", "#d8b8f7"]
+        colors = ["#ffffa0", "#a0c4ff", "#b2f7a0", "#f7a0b2", "#d8b8f7", "#ffc3a0", "#a0f7e4", "#f7a0f7", "#a0a0f7", "#f7f7a0"]
         for color in colors:
             button = QPushButton()
             button.setFixedSize(24, 24)
-            button.setStyleSheet(f"background-color: {color}; border-radius: 12px;")
+            self.color_buttons[color] = button
             button.clicked.connect(lambda _, c=color: self.set_color(c))
             color_layout.addWidget(button)
 
+        self.set_color(self.selected_color)
+
     def set_color(self, color):
         self.selected_color = color
+        for c, btn in self.color_buttons.items():
+            if c == color:
+                btn.setStyleSheet(f"background-color: {c}; border: 2px solid black; border-radius: 12px;")
+            else:
+                btn.setStyleSheet(f"background-color: {c}; border: none; border-radius: 12px;")
 
     def get_data(self):
         return self.description_edit.toPlainText(), self.selected_color

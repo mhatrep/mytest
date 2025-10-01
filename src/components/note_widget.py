@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QFrame
-from PyQt6.QtCore import QSize
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit
+from PyQt6.QtCore import QSize, Qt
 
 class NoteWidget(QWidget):
     def __init__(self, description="", color="#ffffa0", timestamp=""):
@@ -9,10 +9,10 @@ class NoteWidget(QWidget):
         self.timestamp = timestamp
 
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0,0,0,0)
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setFrameShape(QFrame.Shape.NoFrame)
-        self.text_edit.setStyleSheet("background: transparent; border: none;")
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.layout.addWidget(self.text_edit)
         self.setLayout(self.layout)
 
@@ -35,8 +35,8 @@ class NoteWidget(QWidget):
 
     def set_color(self, color):
         self.color = color
-        self.setStyleSheet(f"""
-            NoteWidget {{
+        self.text_edit.setStyleSheet(f"""
+            QTextEdit {{
                 background-color: {self.color};
                 border: 1px solid #ccc;
                 border-radius: 5px;
@@ -45,6 +45,6 @@ class NoteWidget(QWidget):
 
     def sizeHint(self):
         width = 150
-        self.text_edit.document().setTextWidth(width - 10)
+        self.text_edit.document().setTextWidth(width - 10) # HTML padding
         height = self.text_edit.document().size().height()
-        return QSize(width, int(height) + 10)
+        return QSize(width, int(height) + 10) # HTML padding
