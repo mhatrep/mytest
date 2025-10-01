@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLabel, QPushButton, QMenu
-from PyQt6.QtCore import Qt, QSize, QEvent
+from PyQt6.QtCore import Qt
 from components.note_dialog import NoteDialog
 from components.note_widget import NoteWidget
-from commands import AddNoteCommand, EditNoteCommand, DeleteNoteCommand, MoveNoteCommand
+from components.droppable_list_widget import DroppableListWidget
+from commands import AddNoteCommand, EditNoteCommand, DeleteNoteCommand
 
 class KanbanBoard(QWidget):
     def __init__(self, main_window):
@@ -12,7 +13,6 @@ class KanbanBoard(QWidget):
         self.setLayout(self.layout)
 
         self.columns = {}
-        self.drag_start_info = {}
         column_names = ["Backlog", "To Do", "In Progress", "Done"]
 
         for name in column_names:
@@ -28,71 +28,14 @@ class KanbanBoard(QWidget):
             add_button.clicked.connect(lambda _, n=name: self.add_note(n))
             column_layout.addWidget(add_button)
 
-            list_widget = QListWidget()
-            list_widget.setDragDropMode(QListWidget.DragDropMode.DragDrop)
-            list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
-            list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+            list_widget = DroppableListWidget(self.main_window, name)
+            list_widget.setObjectName(name)
             list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             list_widget.customContextMenuRequested.connect(self.show_context_menu)
-
-            list_widget.viewport().installEventFilter(self)
-            list_widget.setObjectName(name)
 
             column_layout.addWidget(list_widget)
             self.columns[name] = list_widget
             self.layout.addWidget(column_widget)
-
-    def eventFilter(self, source, event):
-        if event.type() == QEvent.Type.Drop:
-            if source.parent() in self.columns.values():
-                drop_event = event
-                dest_list = source.parent()
-
-                # Find which item is being dropped on
-                dest_item = dest_list.itemAt(drop_event.position().toPoint())
-                dest_row = dest_list.row(dest_item) if dest_item else dest_list.count()
-
-                # Get source info from where drag started
-                source_list = self.main_window.drag_source_list
-                if not source_list:
-                    return True # Should not happen
-
-                source_item = source_list.currentItem()
-                source_row = source_list.row(source_item)
-                source_col_name = source_list.objectName()
-                note_widget = source_list.itemWidget(source_item)
-
-                if not note_widget:
-                    return True
-
-                note_data = {
-                    "description": note_widget.description,
-                    "color": note_widget.color,
-                    "timestamp": note_widget.timestamp,
-                }
-
-                # If moving within the same list, adjust destination row
-                if dest_list is source_list and source_row < dest_row:
-                    dest_row -= 1
-
-                if dest_list is source_list and source_row == dest_row:
-                    return True # No move
-
-                command = MoveNoteCommand(
-                    main_window=self.main_window,
-                    source_col=source_col_name,
-                    dest_col=dest_list.objectName(),
-                    source_row=source_row,
-                    dest_row=dest_row,
-                    note_data=note_data,
-                )
-                self.main_window.undo_stack.push(command)
-                return True
-
-        elif event.type() == QEvent.Type.DragEnter:
-            self.main_window.drag_source_list = source.parent()
-
-        return super().eventFilter(source, event)
 
     def add_note(self, column_name):
         dialog = NoteDialog(self)

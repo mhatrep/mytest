@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QLineEdit, QToolBar, QListWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QLineEdit, QToolBar, QListWidget, QStackedWidget, QListWidgetItem
 from PyQt6.QtGui import QAction, QUndoStack, QFont
 from PyQt6.QtCore import Qt, QDate
 from models.date_tree_model import DateTreeModel
@@ -36,9 +36,16 @@ class MainWindow(QMainWindow):
         self.date_tree.clicked.connect(self.on_date_tree_clicked)
         self.splitter.addWidget(self.date_tree)
 
-        # Right pane: Kanban Board
+        # Right pane: Stacked widget with Kanban and Search Results
         self.kanban_board = KanbanBoard(self)
-        self.splitter.addWidget(self.kanban_board)
+        self.search_results_list = QListWidget()
+        self.search_results_list.itemDoubleClicked.connect(self.on_search_result_selected)
+
+        self.right_pane = QStackedWidget()
+        self.right_pane.addWidget(self.kanban_board)
+        self.right_pane.addWidget(self.search_results_list)
+        self.splitter.addWidget(self.right_pane)
+
 
         # Set initial sizes
         self.splitter.setSizes([200, 1000])
@@ -98,7 +105,25 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.search_bar)
 
     def on_search_query_changed(self, query):
-        self.kanban_board.filter_notes(query)
+        self.search_results_list.clear()
+        if not query:
+            self.right_pane.setCurrentWidget(self.kanban_board)
+            return
+
+        self.right_pane.setCurrentWidget(self.search_results_list)
+
+        query = query.lower()
+        for date_str, daily_notes in self.data.items():
+            if date_str == "settings": continue
+
+            for column, notes in daily_notes.items():
+                for note in notes:
+                    if query in note["description"].lower():
+                        date = QDate.fromString(date_str, "yyyy-MM-dd")
+                        item_text = f"{note['description']}\n({date.toString('ddd, MMMM d, yyyy')})"
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.ItemDataRole.UserRole, date)
+                        self.search_results_list.addItem(item)
 
     def on_date_tree_clicked(self, index):
         item = self.date_tree_model.itemFromIndex(index)
@@ -111,6 +136,48 @@ class MainWindow(QMainWindow):
             if item.rowCount() == 0:
                 year, month = data
                 self.date_tree_model.add_days(item, year, month)
+
+    def on_search_result_selected(self, item):
+        date = item.data(Qt.ItemDataRole.UserRole)
+        if not date:
+            return
+
+        # Navigate tree and load board
+        self.navigate_tree_to_date(date)
+        self.current_date = date
+        self.load_board_for_date(date)
+
+        # Switch back to Kanban view and clear search
+        self.right_pane.setCurrentWidget(self.kanban_board)
+        self.search_bar.clear()
+
+    def navigate_tree_to_date(self, date):
+        year_str = str(date.year())
+        month_index = date.month() - 1
+        day_index = date.day() - 1
+
+        # Find and expand year
+        year_items = self.date_tree_model.findItems(year_str)
+        if not year_items:
+            return
+        year_item = year_items[0]
+        self.date_tree.expand(year_item.index())
+
+        # Find and expand month
+        month_item = year_item.child(month_index)
+        if not month_item:
+            return
+
+        # Ensure month's days are loaded
+        if month_item.rowCount() == 0:
+            self.date_tree_model.add_days(month_item, date.year(), date.month())
+
+        self.date_tree.expand(month_item.index())
+
+        # Select day
+        day_item = month_item.child(day_index)
+        if day_item:
+            self.date_tree.setCurrentIndex(day_item.index())
 
     def load_board_for_date(self, date):
         date_str = date.toString("yyyy-MM-dd")
