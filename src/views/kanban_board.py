@@ -39,13 +39,13 @@ class KanbanBoard(QWidget):
     def add_note(self, column_name):
         dialog = NoteDialog(self)
         if dialog.exec():
-            title, description, color = dialog.get_data()
-            if title:
-                command = AddNoteCommand(self, column_name, title, description, color)
+            description, color = dialog.get_data()
+            if description:
+                command = AddNoteCommand(self, column_name, description, color)
                 self.main_window.undo_stack.push(command)
 
-    def create_note_widget(self, column_name, title, description, color="#ffffa0", timestamp=""):
-        note_widget = NoteWidget(title, description, color, timestamp)
+    def create_note_widget(self, column_name, description, color="#ffffa0", timestamp=""):
+        note_widget = NoteWidget(description, color, timestamp)
         list_item = QListWidgetItem()
         list_item.setSizeHint(note_widget.sizeHint())
 
@@ -73,17 +73,16 @@ class KanbanBoard(QWidget):
 
     def edit_note(self, list_widget, item):
         note_widget = list_widget.itemWidget(item)
-        old_title = note_widget.title
         old_description = note_widget.description
         old_color = note_widget.color
         old_timestamp = note_widget.timestamp
 
-        dialog = NoteDialog(self, title=old_title, description=old_description, color=old_color)
+        dialog = NoteDialog(self, description=old_description, color=old_color)
         if dialog.exec():
-            new_title, new_description, new_color = dialog.get_data()
-            if new_title:
-                old_data = (old_title, old_description, old_color, old_timestamp)
-                new_data = (new_title, new_description, new_color)
+            new_description, new_color = dialog.get_data()
+            if new_description:
+                old_data = (old_description, old_color, old_timestamp)
+                new_data = (new_description, new_color)
                 command = EditNoteCommand(list_widget, item, note_widget, old_data, new_data, self.main_window)
                 self.main_window.undo_stack.push(command)
 
@@ -97,9 +96,8 @@ class KanbanBoard(QWidget):
             for i in range(column.count()):
                 item = column.item(i)
                 widget = column.itemWidget(item)
-                title = widget.title.lower()
                 description = widget.description.lower()
-                if query in title or query in description:
+                if query in description:
                     item.setHidden(False)
                 else:
                     item.setHidden(True)
@@ -112,7 +110,6 @@ class KanbanBoard(QWidget):
                 item = column.item(i)
                 widget = column.itemWidget(item)
                 notes.append({
-                    "title": widget.title,
                     "description": widget.description,
                     "color": widget.color,
                     "timestamp": widget.timestamp,
@@ -127,7 +124,6 @@ class KanbanBoard(QWidget):
                 for note_data in data[name]:
                     self.create_note_widget(
                         name,
-                        note_data["title"],
                         note_data["description"],
                         note_data.get("color", "#ffffa0"),
                         note_data.get("timestamp", "")

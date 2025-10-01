@@ -5,11 +5,10 @@ from components.note_widget import NoteWidget
 import datetime
 
 class AddNoteCommand(QUndoCommand):
-    def __init__(self, kanban_board, column_name, title, description, color):
+    def __init__(self, kanban_board, column_name, description, color):
         super().__init__()
         self.kanban_board = kanban_board
         self.column_name = column_name
-        self.title = title
         self.description = description
         self.color = color
         self.timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -18,7 +17,7 @@ class AddNoteCommand(QUndoCommand):
 
     def redo(self):
         if not self.list_item:
-            self.note_widget = NoteWidget(self.title, self.description, self.color, self.timestamp)
+            self.note_widget = NoteWidget(self.description, self.color, self.timestamp)
             self.list_item = QListWidgetItem()
             self.list_item.setSizeHint(self.note_widget.sizeHint())
 
@@ -56,19 +55,19 @@ class EditNoteCommand(QUndoCommand):
         self.list_widget = list_widget
         self.item = item
         self.note_widget = note_widget
-        self.old_title, self.old_description, self.old_color, self.old_timestamp = old_data
-        self.new_title, self.new_description, self.new_color = new_data
+        self.old_description, self.old_color, self.old_timestamp = old_data
+        self.new_description, self.new_color = new_data
         self.new_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.main_window = main_window
 
     def redo(self):
-        self.note_widget.set_content(self.new_title, self.new_description, self.new_timestamp)
+        self.note_widget.set_content(self.new_description, self.new_timestamp)
         self.note_widget.set_color(self.new_color)
         self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()
 
     def undo(self):
-        self.note_widget.set_content(self.old_title, self.old_description, self.old_timestamp)
+        self.note_widget.set_content(self.old_description, self.old_timestamp)
         self.note_widget.set_color(self.old_color)
         self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()

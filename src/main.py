@@ -156,7 +156,6 @@ class MainWindow(QMainWindow):
         source_row = source_list.row(dragged_item)
         note_widget = source_list.itemWidget(dragged_item)
         note_data = {
-            "title": note_widget.title,
             "description": note_widget.description,
             "color": note_widget.color,
             "timestamp": note_widget.timestamp,

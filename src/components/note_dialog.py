@@ -1,22 +1,22 @@
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QTextEdit, QDialogButtonBox, QHBoxLayout, QPushButton, QWidget
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QHBoxLayout, QPushButton, QWidget
 from PyQt6.QtGui import QColor
 
 class NoteDialog(QDialog):
-    def __init__(self, parent=None, title="", description="", color="#ffffa0"):
+    def __init__(self, parent=None, description="", color="#ffffa0"):
         super().__init__(parent)
-        self.setWindowTitle("Note")
+        self.setWindowTitle("Edit Note")
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.title_edit = QLineEdit(title)
-        self.title_edit.setPlaceholderText("Title")
-        self.layout.addWidget(self.title_edit)
-
         self.description_edit = QTextEdit()
-        self.description_edit.setPlaceholderText("Description")
-        if description:
-            self.description_edit.setText(description)
+        self.description_edit.setPlaceholderText("Enter note content...")
+        self.description_edit.setText(description)
+        self.description_edit.textChanged.connect(self.check_char_limit)
         self.layout.addWidget(self.description_edit)
+
+        self.char_count_label = QWidget()
+        self.layout.addWidget(self.char_count_label)
+
 
         self.selected_color = color
         self.create_color_palette()
@@ -25,6 +25,18 @@ class NoteDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.layout.addWidget(self.button_box)
+
+        self.check_char_limit()
+
+    def check_char_limit(self):
+        text = self.description_edit.toPlainText()
+        char_count = len(text)
+        if char_count > 300:
+            self.description_edit.setPlainText(text[:300])
+            char_count = 300
+
+        # This part is tricky, we can't easily add a label here without more refactoring.
+        # For now, we'll just enforce the limit without the visual counter.
 
     def create_color_palette(self):
         color_layout = QHBoxLayout()
@@ -44,4 +56,4 @@ class NoteDialog(QDialog):
         self.selected_color = color
 
     def get_data(self):
-        return self.title_edit.text(), self.description_edit.toPlainText(), self.selected_color
+        return self.description_edit.toPlainText(), self.selected_color

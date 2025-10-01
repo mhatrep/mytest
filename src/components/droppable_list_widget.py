@@ -20,7 +20,6 @@ class DroppableListWidget(QListWidget):
             source_column_name = source_widget.column_name
             note_widget = source_widget.itemWidget(source_item)
             note_data = {
-                "title": note_widget.title,
                 "description": note_widget.description,
                 "color": note_widget.color,
                 "timestamp": note_widget.timestamp,
