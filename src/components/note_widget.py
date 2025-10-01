@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QFrame
 from PyQt6.QtCore import QSize
 
 class NoteWidget(QWidget):
@@ -12,7 +12,7 @@ class NoteWidget(QWidget):
         self.layout = QVBoxLayout()
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setFrameStyle(QTextEdit.FrameStyle.NoFrame)
+        self.text_edit.setFrameShape(QFrame.Shape.NoFrame)
         self.text_edit.setStyleSheet("background: transparent; border: none;")
         self.layout.addWidget(self.text_edit)
         self.setLayout(self.layout)
