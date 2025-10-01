@@ -2,8 +2,9 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import QSize
 
 class NoteWidget(QWidget):
-    def __init__(self, title, description=""):
+    def __init__(self, title, description="", color="#ffffa0"):
         super().__init__()
+        self.color = color
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
@@ -14,12 +15,16 @@ class NoteWidget(QWidget):
         self.layout.addWidget(self.title_label)
         self.layout.addWidget(self.description_label)
 
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #f0f0f0;
+        self.set_color(color)
+
+    def set_color(self, color):
+        self.color = color
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {self.color};
                 border: 1px solid #ccc;
                 border-radius: 5px;
-            }
+            }}
         """)
 
     def sizeHint(self):

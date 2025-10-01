@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
             self.load_board_for_date(self.current_date)
         elif isinstance(data, tuple):
             # It's a month item. Populate if it hasn't been populated.
-            if item.childCount() == 0:
+            if item.rowCount() == 0:
                 year, month = data
                 self.date_tree_model.add_days(item, year, month)
 
