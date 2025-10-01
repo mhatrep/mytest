@@ -2,6 +2,8 @@ from PyQt6.QtGui import QUndoCommand
 from PyQt6.QtWidgets import QListWidgetItem
 from components.note_widget import NoteWidget
 
+import datetime
+
 class AddNoteCommand(QUndoCommand):
     def __init__(self, kanban_board, column_name, title, description, color):
         super().__init__()
@@ -10,12 +12,13 @@ class AddNoteCommand(QUndoCommand):
         self.title = title
         self.description = description
         self.color = color
+        self.timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.list_item = None
         self.note_widget = None
 
     def redo(self):
         if not self.list_item:
-            self.note_widget = NoteWidget(self.title, self.description, self.color)
+            self.note_widget = NoteWidget(self.title, self.description, self.color, self.timestamp)
             self.list_item = QListWidgetItem()
             self.list_item.setSizeHint(self.note_widget.sizeHint())
 
@@ -48,23 +51,30 @@ class DeleteNoteCommand(QUndoCommand):
         self.kanban_board.main_window.sync_data_from_board()
 
 class EditNoteCommand(QUndoCommand):
-    def __init__(self, note_widget, old_data, new_data, main_window):
+    def __init__(self, list_widget, item, note_widget, old_data, new_data, main_window):
         super().__init__()
+        self.list_widget = list_widget
+        self.item = item
         self.note_widget = note_widget
-        self.old_title, self.old_description, self.old_color = old_data
+        self.old_title, self.old_description, self.old_color, self.old_timestamp = old_data
         self.new_title, self.new_description, self.new_color = new_data
+        self.new_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.main_window = main_window
 
     def redo(self):
         self.note_widget.title_label.setText(self.new_title)
         self.note_widget.description_label.setText(self.new_description)
         self.note_widget.set_color(self.new_color)
+        self.note_widget.timestamp_label.setText(self.new_timestamp)
+        self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()
 
     def undo(self):
         self.note_widget.title_label.setText(self.old_title)
         self.note_widget.description_label.setText(self.old_description)
         self.note_widget.set_color(self.old_color)
+        self.note_widget.timestamp_label.setText(self.old_timestamp)
+        self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()
 
 class MoveNoteCommand(QUndoCommand):

@@ -1,8 +1,9 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QLineEdit, QToolBar, QListWidget
-from PyQt6.QtGui import QAction, QUndoStack
+from PyQt6.QtGui import QAction, QUndoStack, QFont
 from PyQt6.QtCore import Qt, QDate
 from models.date_tree_model import DateTreeModel
+from components.settings_dialog import SettingsDialog
 from views.kanban_board import KanbanBoard
 from commands import RescheduleNoteCommand
 import data_manager
@@ -15,6 +16,7 @@ class MainWindow(QMainWindow):
         self.current_date = QDate.currentDate()
         self.undo_stack = QUndoStack(self)
         self.data = data_manager.load_data()
+        self.load_settings()
 
         # Create the splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -42,11 +44,18 @@ class MainWindow(QMainWindow):
         self.load_board_for_date(self.current_date)
 
     def closeEvent(self, event):
+        self.save_settings()
         data_manager.save_data(self.data)
         event.accept()
 
     def create_menus(self):
         menu_bar = self.menuBar()
+
+        file_menu = menu_bar.addMenu("File")
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings_dialog)
+        file_menu.addAction(settings_action)
+
         edit_menu = menu_bar.addMenu("Edit")
 
         undo_action = self.undo_stack.createUndoAction(self, "Undo")
@@ -56,6 +65,25 @@ class MainWindow(QMainWindow):
         redo_action = self.undo_stack.createRedoAction(self, "Redo")
         redo_action.setShortcut("Ctrl+Y")
         edit_menu.addAction(redo_action)
+
+    def load_settings(self):
+        settings = self.data.get("settings", {})
+        font_str = settings.get("font")
+        if font_str:
+            font = QFont()
+            font.fromString(font_str)
+            QApplication.instance().setFont(font)
+
+    def save_settings(self):
+        if "settings" not in self.data:
+            self.data["settings"] = {}
+        self.data["settings"]["font"] = QApplication.instance().font().toString()
+
+    def open_settings_dialog(self):
+        dialog = SettingsDialog(self, current_font=QApplication.instance().font())
+        if dialog.exec():
+            font = dialog.get_font()
+            QApplication.instance().setFont(font)
 
     def create_toolbar(self):
         toolbar = QToolBar("Main Toolbar")
@@ -85,6 +113,8 @@ class MainWindow(QMainWindow):
         date_str = date.toString("yyyy-MM-dd")
         notes = self.data.get(date_str, {})
         self.kanban_board.load_notes(notes)
+        if hasattr(self, 'search_bar'):
+            self.on_search_query_changed(self.search_bar.text())
 
     def sync_data_from_board(self):
         date_str = self.current_date.toString("yyyy-MM-dd")

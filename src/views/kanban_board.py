@@ -44,8 +44,8 @@ class KanbanBoard(QWidget):
                 command = AddNoteCommand(self, column_name, title, description, color)
                 self.main_window.undo_stack.push(command)
 
-    def create_note_widget(self, column_name, title, description, color="#ffffa0"):
-        note_widget = NoteWidget(title, description, color)
+    def create_note_widget(self, column_name, title, description, color="#ffffa0", timestamp=""):
+        note_widget = NoteWidget(title, description, color, timestamp)
         list_item = QListWidgetItem()
         list_item.setSizeHint(note_widget.sizeHint())
 
@@ -76,14 +76,15 @@ class KanbanBoard(QWidget):
         old_title = note_widget.title_label.text()
         old_description = note_widget.description_label.text()
         old_color = note_widget.color
+        old_timestamp = note_widget.timestamp_label.text()
 
         dialog = NoteDialog(self, title=old_title, description=old_description, color=old_color)
         if dialog.exec():
             new_title, new_description, new_color = dialog.get_data()
             if new_title:
-                old_data = (old_title, old_description, old_color)
+                old_data = (old_title, old_description, old_color, old_timestamp)
                 new_data = (new_title, new_description, new_color)
-                command = EditNoteCommand(note_widget, old_data, new_data, self.main_window)
+                command = EditNoteCommand(list_widget, item, note_widget, old_data, new_data, self.main_window)
                 self.main_window.undo_stack.push(command)
 
     def delete_note(self, list_widget, item):
@@ -113,7 +114,8 @@ class KanbanBoard(QWidget):
                 notes.append({
                     "title": widget.title_label.text(),
                     "description": widget.description_label.text(),
-                    "color": widget.color
+                    "color": widget.color,
+                    "timestamp": widget.timestamp_label.text()
                 })
             data[name] = notes
         return data
@@ -123,4 +125,10 @@ class KanbanBoard(QWidget):
             column.clear()
             if name in data:
                 for note_data in data[name]:
-                    self.create_note_widget(name, note_data["title"], note_data["description"], note_data.get("color", "#ffffa0"))
+                    self.create_note_widget(
+                        name,
+                        note_data["title"],
+                        note_data["description"],
+                        note_data.get("color", "#ffffa0"),
+                        note_data.get("timestamp", "")
+                    )
