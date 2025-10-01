@@ -73,10 +73,10 @@ class KanbanBoard(QWidget):
 
     def edit_note(self, list_widget, item):
         note_widget = list_widget.itemWidget(item)
-        old_title = note_widget.title_label.text()
-        old_description = note_widget.description_label.text()
+        old_title = note_widget.title
+        old_description = note_widget.description
         old_color = note_widget.color
-        old_timestamp = note_widget.timestamp_label.text()
+        old_timestamp = note_widget.timestamp
 
         dialog = NoteDialog(self, title=old_title, description=old_description, color=old_color)
         if dialog.exec():
@@ -97,8 +97,8 @@ class KanbanBoard(QWidget):
             for i in range(column.count()):
                 item = column.item(i)
                 widget = column.itemWidget(item)
-                title = widget.title_label.text().lower()
-                description = widget.description_label.text().lower()
+                title = widget.title.lower()
+                description = widget.description.lower()
                 if query in title or query in description:
                     item.setHidden(False)
                 else:
@@ -112,10 +112,10 @@ class KanbanBoard(QWidget):
                 item = column.item(i)
                 widget = column.itemWidget(item)
                 notes.append({
-                    "title": widget.title_label.text(),
-                    "description": widget.description_label.text(),
+                    "title": widget.title,
+                    "description": widget.description,
                     "color": widget.color,
-                    "timestamp": widget.timestamp_label.text()
+                    "timestamp": widget.timestamp,
                 })
             data[name] = notes
         return data

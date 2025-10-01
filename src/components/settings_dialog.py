@@ -22,7 +22,7 @@ class SettingsDialog(QDialog):
         self.layout.addWidget(self.button_box)
 
     def change_font(self):
-        ok, font = QFontDialog.getFont(self.font, self)
+        font, ok = QFontDialog.getFont(self.font, self)
         if ok:
             self.font = font
             self.font_label.setText(f"Current Font: {self.font.family()}, {self.font.pointSize()}pt")

@@ -62,18 +62,14 @@ class EditNoteCommand(QUndoCommand):
         self.main_window = main_window
 
     def redo(self):
-        self.note_widget.title_label.setText(self.new_title)
-        self.note_widget.description_label.setText(self.new_description)
+        self.note_widget.set_content(self.new_title, self.new_description, self.new_timestamp)
         self.note_widget.set_color(self.new_color)
-        self.note_widget.timestamp_label.setText(self.new_timestamp)
         self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()
 
     def undo(self):
-        self.note_widget.title_label.setText(self.old_title)
-        self.note_widget.description_label.setText(self.old_description)
+        self.note_widget.set_content(self.old_title, self.old_description, self.old_timestamp)
         self.note_widget.set_color(self.old_color)
-        self.note_widget.timestamp_label.setText(self.old_timestamp)
         self.item.setSizeHint(self.note_widget.sizeHint())
         self.main_window.sync_data_from_board()
 
