@@ -16,6 +16,8 @@ class NoteWidget(QWidget):
         self.layout.addWidget(self.text_edit)
         self.setLayout(self.layout)
 
+        self.setToolTip("Right-click to edit or delete")
+
         self.update_display()
         self.set_color(color)
 

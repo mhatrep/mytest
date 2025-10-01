@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLabel, QPushButton, QMenu
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidgetItem, QLabel, QPushButton, QMenu
 from PyQt6.QtCore import Qt
 from components.note_dialog import NoteDialog
 from components.note_widget import NoteWidget

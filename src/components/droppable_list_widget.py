@@ -15,6 +15,7 @@ class DroppableListWidget(QListWidget):
     def startDrag(self, supportedActions):
         item = self.currentItem()
         mime_data = QMimeData()
+        # Store source column name and row index
         mime_data.setText(f"{self.objectName()},{self.row(item)}")
 
         drag = QDrag(self)
@@ -32,8 +33,12 @@ class DroppableListWidget(QListWidget):
 
         source_list = self.main_window.kanban_board.columns[source_col_name]
         source_item = source_list.item(source_row)
-        note_widget = source_list.itemWidget(source_item)
 
+        if not source_item:
+            event.ignore()
+            return
+
+        note_widget = source_list.itemWidget(source_item)
         if not note_widget:
             event.ignore()
             return
@@ -67,7 +72,13 @@ class DroppableListWidget(QListWidget):
         event.accept()
 
     def dragEnterEvent(self, event):
-        event.accept()
+        if event.mimeData().hasText():
+            event.accept()
+        else:
+            event.ignore()
 
     def dragMoveEvent(self, event):
-        event.accept()
+        if event.mimeData().hasText():
+            event.accept()
+        else:
+            event.ignore()

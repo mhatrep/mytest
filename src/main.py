@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt, QDate
 from models.date_tree_model import DateTreeModel
 from components.settings_dialog import SettingsDialog
 from views.kanban_board import KanbanBoard
+from components.search_result_widget import SearchResultWidget
 from commands import RescheduleNoteCommand
 import data_manager
 
@@ -120,10 +121,18 @@ class MainWindow(QMainWindow):
                 for note in notes:
                     if query in note["description"].lower():
                         date = QDate.fromString(date_str, "yyyy-MM-dd")
-                        item_text = f"{note['description']}\n({date.toString('ddd, MMMM d, yyyy')})"
-                        item = QListWidgetItem(item_text)
-                        item.setData(Qt.ItemDataRole.UserRole, date)
-                        self.search_results_list.addItem(item)
+
+                        list_item = QListWidgetItem()
+                        list_item.setData(Qt.ItemDataRole.UserRole, date)
+
+                        widget = SearchResultWidget(
+                            description=note["description"],
+                            date_str=date.toString("ddd, MMMM d, yyyy"),
+                            color=note.get("color", "#ffffa0")
+                        )
+                        list_item.setSizeHint(widget.sizeHint())
+                        self.search_results_list.addItem(list_item)
+                        self.search_results_list.setItemWidget(list_item, widget)
 
     def on_date_tree_clicked(self, index):
         item = self.date_tree_model.itemFromIndex(index)
