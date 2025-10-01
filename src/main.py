@@ -1,8 +1,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QLineEdit, QToolBar, QListWidget
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QUndoStack
 from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtWidgets import QUndoStack
 from models.date_tree_model import DateTreeModel
 from views.kanban_board import KanbanBoard
 import data_manager

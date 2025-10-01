@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QUndoCommand, QListWidgetItem
+from PyQt6.QtGui import QUndoCommand
+from PyQt6.QtWidgets import QListWidgetItem
 from components.note_widget import NoteWidget
 
 class AddNoteCommand(QUndoCommand):
