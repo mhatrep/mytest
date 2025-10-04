@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
 
         # Dock Widget (Left Pane)
         self.db_dock_widget = QDockWidget("Databases", self)
+        self.db_dock_widget.setObjectName("DatabasesDockWidget")
         left_pane = QWidget()
         left_layout = QVBoxLayout(left_pane)
 
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
 
         # Toolbar
         toolbar = self.addToolBar("Main Toolbar")
+        toolbar.setObjectName("MainToolBar")
         self.toggle_db_panel_action = QAction("Databases", self)
         self.toggle_db_panel_action.setCheckable(True)
         self.toggle_db_panel_action.triggered.connect(self.toggle_db_panel)
