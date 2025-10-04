@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import concurrent.futures
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -23,6 +24,7 @@ from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal, QTimer, QUrl
 
 SUPPORTED_FORMATS = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg"]
 CONFIG_FILE = "config.json"
+CACHE_FILE = "index.cache"
 
 class Worker(QObject):
     finished = pyqtSignal()
@@ -32,13 +34,24 @@ class Worker(QObject):
         super().__init__()
         self.dir_paths = dir_paths
 
+    def scan_directory(self, dir_path):
+        paths = []
+        for root, _, files in os.walk(dir_path):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in SUPPORTED_FORMATS):
+                    paths.append(os.path.join(root, file))
+        return paths
+
     def run(self):
         image_paths = []
-        for dir_path in self.dir_paths:
-            for root, _, files in os.walk(dir_path):
-                for file in files:
-                    if any(file.lower().endswith(ext) for ext in SUPPORTED_FORMATS):
-                        image_paths.append(os.path.join(root, file))
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_dir = {executor.submit(self.scan_directory, dir_path): dir_path for dir_path in self.dir_paths}
+            for future in concurrent.futures.as_completed(future_to_dir):
+                try:
+                    image_paths.extend(future.result())
+                except Exception as exc:
+                    print(f'{future_to_dir[future]} generated an exception: {exc}')
+
         self.result.emit(image_paths)
         self.finished.emit()
 
@@ -53,6 +66,7 @@ class ImageSearchApp(QMainWindow):
         self.init_ui()
         self.apply_stylesheet()
         self.load_config()
+        self.load_index_cache()
         self.showMaximized()
 
     def closeEvent(self, event):
@@ -116,12 +130,14 @@ class ImageSearchApp(QMainWindow):
         search_layout = QVBoxLayout(search_group)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter search query")
+        self.search_input.textChanged.connect(self.search_images)
         self.case_sensitive_checkbox = QCheckBox("Case Sensitive")
-        self.search_button = QPushButton("Search")
-        self.search_button.clicked.connect(self.start_indexing)
+        self.case_sensitive_checkbox.stateChanged.connect(self.search_images)
+        self.refresh_button = QPushButton("Refresh Index")
+        self.refresh_button.clicked.connect(self.start_indexing)
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.case_sensitive_checkbox)
-        search_layout.addWidget(self.search_button)
+        search_layout.addWidget(self.refresh_button)
         left_layout.addWidget(search_group)
 
         # Directory management
@@ -207,16 +223,17 @@ class ImageSearchApp(QMainWindow):
 
         self.add_dir_button.setEnabled(False)
         self.remove_dir_button.setEnabled(False)
-        self.search_button.setEnabled(False)
+        self.refresh_button.setEnabled(False)
         self.status_bar.showMessage("Indexing images...")
 
     def handle_indexing_result(self, image_paths):
         self.image_paths = image_paths
+        self.save_index_cache()
         print(f"Indexed {len(self.image_paths)} images.")
         self.search_images()
         self.add_dir_button.setEnabled(True)
         self.remove_dir_button.setEnabled(True)
-        self.search_button.setEnabled(True)
+        self.refresh_button.setEnabled(True)
         self.status_bar.clearMessage()
 
     def search_images(self):
@@ -303,6 +320,21 @@ class ImageSearchApp(QMainWindow):
                     self.dir_list.addItem(item)
         except (json.JSONDecodeError, KeyError):
             print(f"Error reading or parsing {CONFIG_FILE}. A new one will be created on exit.")
+
+    def save_index_cache(self):
+        with open(CACHE_FILE, "w") as f:
+            json.dump(self.image_paths, f)
+
+    def load_index_cache(self):
+        if not os.path.exists(CACHE_FILE):
+            return
+        try:
+            with open(CACHE_FILE, "r") as f:
+                self.image_paths = json.load(f)
+                print(f"Loaded {len(self.image_paths)} images from cache.")
+                self.search_images()
+        except (json.JSONDecodeError, KeyError):
+            print(f"Error reading or parsing {CACHE_FILE}. A new one will be created on next index.")
 
 
 if __name__ == "__main__":
