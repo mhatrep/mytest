@@ -1,0 +1,70 @@
+{
+    "databases": [
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/articulate.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/python.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/one_liners.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/prompts.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/checklist.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/thinking.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/reference.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/test22.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/academic.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/targeted_names.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/Prepositions.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/presentation.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/professional_english.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/fluency.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/images.db",
+            "checked": true
+        },
+        {
+            "path": "C:/Utils/DB.Browser.for.SQLite-v3.13.1-win64/_database/interviews.db",
+            "checked": true
+        }
+    ],
+    "window_geometry": "01d9d0cb0003000000000000fffffff9000004ff0000029f000000070000001e0000032600000275000000000200000005000000000000000017000004ff0000029f",
+    "window_state": "000000ff00000000fd0000000100000000000001120000026ffc0200000001fbffffffff000000001a0000026f0000009800ffffff000005000000026f00000004000000040000000800000008fc000000010000000200000001ffffffff0100000000ffffffff0000000000000000"
+}
