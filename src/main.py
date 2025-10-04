@@ -144,6 +144,7 @@ class ImageSearchApp(QMainWindow):
         dir_group = QWidget()
         dir_layout = QVBoxLayout(dir_group)
         self.dir_list = QListWidget()
+        self.dir_list.itemChanged.connect(self.start_indexing)
         dir_buttons_layout = QHBoxLayout()
         self.add_dir_button = QPushButton("Add Directory")
         self.add_dir_button.clicked.connect(self.add_directory)
@@ -199,6 +200,7 @@ class ImageSearchApp(QMainWindow):
     def remove_directory(self):
         for item in self.dir_list.selectedItems():
             self.dir_list.takeItem(self.dir_list.row(item))
+        self.start_indexing()
 
     def start_indexing(self):
         checked_dirs = []
@@ -310,6 +312,8 @@ class ImageSearchApp(QMainWindow):
     def load_config(self):
         if not os.path.exists(CONFIG_FILE):
             return
+
+        self.dir_list.blockSignals(True)
         try:
             with open(CONFIG_FILE, "r") as f:
                 config = json.load(f)
@@ -320,6 +324,8 @@ class ImageSearchApp(QMainWindow):
                     self.dir_list.addItem(item)
         except (json.JSONDecodeError, KeyError):
             print(f"Error reading or parsing {CONFIG_FILE}. A new one will be created on exit.")
+        finally:
+            self.dir_list.blockSignals(False)
 
     def save_index_cache(self):
         with open(CACHE_FILE, "w") as f:
