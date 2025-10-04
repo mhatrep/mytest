@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QDockWidget,
 )
-from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal, QTimer
+from PyQt6.QtGui import QIcon, QPixmap, QDesktopServices
+from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal, QTimer, QUrl
 
 SUPPORTED_FORMATS = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg"]
 CONFIG_FILE = "config.json"
@@ -103,18 +103,26 @@ class ImageSearchApp(QMainWindow):
         """)
 
     def init_ui(self):
-        # Central widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+        # Main splitter
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.setCentralWidget(main_splitter)
 
-        # Config dock
-        config_dock = QDockWidget("Configuration", self)
-        config_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, config_dock)
-        config_widget = QWidget()
-        config_dock.setWidget(config_widget)
-        config_layout = QHBoxLayout(config_widget)
+        # Left panel (controls)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+
+        # Search controls
+        search_group = QWidget()
+        search_layout = QVBoxLayout(search_group)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Enter search query")
+        self.case_sensitive_checkbox = QCheckBox("Case Sensitive")
+        self.search_button = QPushButton("Search")
+        self.search_button.clicked.connect(self.start_indexing)
+        search_layout.addWidget(self.search_input)
+        search_layout.addWidget(self.case_sensitive_checkbox)
+        search_layout.addWidget(self.search_button)
+        left_layout.addWidget(search_group)
 
         # Directory management
         dir_group = QWidget()
@@ -129,38 +137,29 @@ class ImageSearchApp(QMainWindow):
         dir_buttons_layout.addWidget(self.remove_dir_button)
         dir_layout.addWidget(self.dir_list)
         dir_layout.addLayout(dir_buttons_layout)
-        config_layout.addWidget(dir_group)
+        left_layout.addWidget(dir_group)
 
-        # Search controls
-        search_group = QWidget()
-        search_layout = QVBoxLayout(search_group)
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Enter search query")
-        self.case_sensitive_checkbox = QCheckBox("Case Sensitive")
-        self.search_button = QPushButton("Search")
-        self.search_button.clicked.connect(self.start_indexing)
-        search_layout.addWidget(self.search_input)
-        search_layout.addWidget(self.case_sensitive_checkbox)
-        search_layout.addWidget(self.search_button)
-        search_layout.addStretch()
-        config_layout.addWidget(search_group)
+        # Right panel (results and preview)
+        right_splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Results view and preview
-        splitter = QSplitter(Qt.Orientation.Horizontal)
         self.results_list = QListWidget()
         self.results_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.results_list.setIconSize(QSize(128, 128))
         self.results_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.results_list.itemSelectionChanged.connect(self.update_preview)
+        self.results_list.itemDoubleClicked.connect(self.open_image_file)
 
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        splitter.addWidget(self.results_list)
-        splitter.addWidget(self.preview_label)
-        splitter.setSizes([400, 400])
+        right_splitter.addWidget(self.results_list)
+        right_splitter.addWidget(self.preview_label)
 
-        main_layout.addWidget(splitter)
+        main_splitter.addWidget(left_panel)
+        main_splitter.addWidget(right_splitter)
+
+        main_splitter.setSizes([200, 800])
+        right_splitter.setSizes([200, 600])
 
         # Status bar
         self.status_bar = QStatusBar()
@@ -169,10 +168,17 @@ class ImageSearchApp(QMainWindow):
     def add_directory(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if dir_path:
+            # Check for duplicates
+            items = self.dir_list.findItems(dir_path, Qt.MatchFlag.MatchExactly)
+            if items:
+                self.status_bar.showMessage("Directory already in the list.", 3000)
+                return
+
             item = QListWidgetItem(dir_path)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked)
             self.dir_list.addItem(item)
+            self.start_indexing()
 
     def remove_directory(self):
         for item in self.dir_list.selectedItems():
@@ -251,6 +257,10 @@ class ImageSearchApp(QMainWindow):
             )
         else:
             self.preview_label.clear()
+
+    def open_image_file(self, item):
+        path = item.data(Qt.ItemDataRole.UserRole)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def load_batch(self):
         batch_size = 20  # Load 20 items at a time
