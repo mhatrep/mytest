@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QDockWidget,
 )
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal, QTimer
 
 SUPPORTED_FORMATS = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg"]
 CONFIG_FILE = "config.json"
@@ -47,10 +47,13 @@ class ImageSearchApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Image Search")
         self.image_paths = []
+        self.search_results = []
+        self.load_timer = QTimer()
+        self.load_timer.timeout.connect(self.load_batch)
         self.init_ui()
         self.apply_stylesheet()
         self.load_config()
-        self.show()
+        self.showMaximized()
 
     def closeEvent(self, event):
         self.save_config()
@@ -60,10 +63,6 @@ class ImageSearchApp(QMainWindow):
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f0f0f0;
-            }
-            QDockWidget {
-                titlebar-close-icon: none;
-                titlebar-float-icon: none;
             }
             QDockWidget::title {
                 background-color: #e0e0e0;
@@ -111,6 +110,7 @@ class ImageSearchApp(QMainWindow):
 
         # Config dock
         config_dock = QDockWidget("Configuration", self)
+        config_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, config_dock)
         config_widget = QWidget()
         config_dock.setWidget(config_widget)
@@ -216,7 +216,9 @@ class ImageSearchApp(QMainWindow):
     def search_images(self):
         query = self.search_input.text()
         case_sensitive = self.case_sensitive_checkbox.isChecked()
+
         self.results_list.clear()
+        self.search_results = []
 
         if not case_sensitive:
             query = query.lower()
@@ -227,9 +229,13 @@ class ImageSearchApp(QMainWindow):
                 filename = filename.lower()
 
             if query in filename:
-                item = QListWidgetItem(QIcon(path), os.path.basename(path))
-                item.setData(Qt.ItemDataRole.UserRole, path)
-                self.results_list.addItem(item)
+                self.search_results.append(path)
+
+        if self.search_results:
+            self.load_timer.start(50)  # Load every 50ms
+            self.status_bar.showMessage(f"Loading {len(self.search_results)} images...")
+        else:
+            self.status_bar.showMessage("No images found.", 3000)
 
     def update_preview(self):
         selected_items = self.results_list.selectedItems()
@@ -245,6 +251,23 @@ class ImageSearchApp(QMainWindow):
             )
         else:
             self.preview_label.clear()
+
+    def load_batch(self):
+        batch_size = 20  # Load 20 items at a time
+        for _ in range(batch_size):
+            if not self.search_results:
+                self.load_timer.stop()
+                self.status_bar.showMessage(f"Loaded {self.results_list.count()} images.", 3000)
+                return
+
+            path = self.search_results.pop(0)
+            item = QListWidgetItem(QIcon(path), os.path.basename(path))
+            item.setData(Qt.ItemDataRole.UserRole, path)
+            self.results_list.addItem(item)
+
+        remaining = len(self.search_results)
+        total = self.results_list.count() + remaining
+        self.status_bar.showMessage(f"Loading... ({total - remaining}/{total})")
 
     def save_config(self):
         config = []
