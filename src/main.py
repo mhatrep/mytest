@@ -2,6 +2,7 @@ import sys
 import os
 from PyQt6.QtWidgets import (
     QApplication,
+    QMainWindow,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -13,43 +14,113 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QLabel,
     QSplitter,
+    QStatusBar,
+    QDockWidget,
 )
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, QObject, QThread, pyqtSignal
 
 SUPPORTED_FORMATS = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg"]
 
-class ImageSearchApp(QWidget):
+class Worker(QObject):
+    finished = pyqtSignal()
+    result = pyqtSignal(list)
+
+    def __init__(self, dir_path):
+        super().__init__()
+        self.dir_path = dir_path
+
+    def run(self):
+        image_paths = []
+        for root, _, files in os.walk(self.dir_path):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in SUPPORTED_FORMATS):
+                    image_paths.append(os.path.join(root, file))
+        self.result.emit(image_paths)
+        self.finished.emit()
+
+class ImageSearchApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Search")
         self.image_paths = []
         self.init_ui()
+        self.apply_stylesheet()
         self.show()
 
-    def init_ui(self):
-        main_layout = QVBoxLayout()
-        self.setLayout(main_layout)
+    def apply_stylesheet(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #2b2b2b;
+            }
+            QDockWidget {
+                titlebar-close-icon: none;
+                titlebar-float-icon: none;
+            }
+            QDockWidget::title {
+                background-color: #3c3f41;
+                color: #f0f0f0;
+                padding: 5px;
+            }
+            QWidget {
+                background-color: #2b2b2b;
+                color: #f0f0f0;
+                border: none;
+            }
+            QPushButton {
+                background-color: #3c3f41;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #4e5254;
+            }
+            QLineEdit {
+                background-color: #3c3f41;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator {
+                width: 13px;
+                height: 13px;
+            }
+            QListWidget {
+                background-color: #3c3f41;
+            }
+            QStatusBar {
+                background-color: #3c3f41;
+            }
+        """)
 
-        # Directory selection
-        dir_layout = QHBoxLayout()
+    def init_ui(self):
+        # Central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+
+        # Search dock
+        search_dock = QDockWidget("Search", self)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, search_dock)
+        search_widget = QWidget()
+        search_dock.setWidget(search_widget)
+        search_layout = QVBoxLayout(search_widget)
+
         self.dir_button = QPushButton("Select Directory")
         self.dir_button.clicked.connect(self.select_directory)
-        dir_layout.addWidget(self.dir_button)
-        main_layout.addLayout(dir_layout)
+        search_layout.addWidget(self.dir_button)
 
-        # Search bar
-        search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter search query")
+        search_layout.addWidget(self.search_input)
+
         self.case_sensitive_checkbox = QCheckBox("Case Sensitive")
+        search_layout.addWidget(self.case_sensitive_checkbox)
+
         self.search_button = QPushButton("Search")
         self.search_button.clicked.connect(self.search_images)
-
-        search_layout.addWidget(self.search_input)
-        search_layout.addWidget(self.case_sensitive_checkbox)
         search_layout.addWidget(self.search_button)
-        main_layout.addLayout(search_layout)
+
+        search_layout.addStretch()
 
         # Results view and preview
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -68,19 +139,33 @@ class ImageSearchApp(QWidget):
 
         main_layout.addWidget(splitter)
 
+        # Status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
     def select_directory(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if dir_path:
-            self.index_images(dir_path)
+            self.thread = QThread()
+            self.worker = Worker(dir_path)
+            self.worker.moveToThread(self.thread)
+            self.thread.started.connect(self.worker.run)
+            self.worker.finished.connect(self.thread.quit)
+            self.worker.finished.connect(self.worker.deleteLater)
+            self.thread.finished.connect(self.thread.deleteLater)
+            self.worker.result.connect(self.handle_indexing_result)
+            self.thread.start()
+            self.dir_button.setEnabled(False)
+            self.search_button.setEnabled(False)
+            self.status_bar.showMessage("Indexing images...")
 
-    def index_images(self, dir_path):
-        self.image_paths = []
-        for root, _, files in os.walk(dir_path):
-            for file in files:
-                if any(file.lower().endswith(ext) for ext in SUPPORTED_FORMATS):
-                    self.image_paths.append(os.path.join(root, file))
+    def handle_indexing_result(self, image_paths):
+        self.image_paths = image_paths
         print(f"Indexed {len(self.image_paths)} images.")
         self.search_images()
+        self.dir_button.setEnabled(True)
+        self.search_button.setEnabled(True)
+        self.status_bar.clearMessage()
 
     def search_images(self):
         query = self.search_input.text()
