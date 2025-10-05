@@ -292,6 +292,7 @@ class MainWindow(QMainWindow):
         for col_index, cell_data in enumerate(row_data):
             cell_text = str(cell_data)
             label = QLabel()
+            label.setWordWrap(True)
             if search_term.lower() in cell_text.lower():
                 # Use regex for case-insensitive replacement
                 pattern = re.compile(re.escape(search_term), re.IGNORECASE)
@@ -301,17 +302,18 @@ class MainWindow(QMainWindow):
                 label.setText(cell_text)
             table.setCellWidget(row_position, col_index, label)
 
-        table.resizeColumnsToContents()
-        table.resizeRowsToContents()
-
-        # Adjust table height to show all rows
-        content_height = sum(table.rowHeight(i) for i in range(table.rowCount()))
-        total_height = table.horizontalHeader().height() + content_height + (table.frameWidth() * 2)
-        table.setFixedHeight(total_height)
 
     def on_search_finished(self):
         if self.searching_label:
             self.searching_label.setText("No matches found.")
+
+        for table in self.result_tables.values():
+            table.resizeColumnsToContents()
+            table.resizeRowsToContents()
+            content_height = sum(table.rowHeight(i) for i in range(table.rowCount()))
+            total_height = table.horizontalHeader().height() + content_height + (table.frameWidth() * 2)
+            table.setFixedHeight(total_height)
+
         self.search_button.setEnabled(True)
 
     def _get_formatted_results(self):
