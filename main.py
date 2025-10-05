@@ -2,11 +2,13 @@ import sys
 import sqlite3
 import json
 import re
+import os
 import concurrent.futures
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QListWidget, QListWidgetItem, QFileDialog, QLabel, QDockWidget,
-    QScrollArea, QTableWidget, QTableWidgetItem, QFrame, QAbstractItemView
+    QScrollArea, QTableWidget, QTableWidgetItem, QFrame, QAbstractItemView,
+    QCheckBox
 )
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QColor, QClipboard, QAction
@@ -121,6 +123,10 @@ class MainWindow(QMainWindow):
         left_layout.addLayout(db_button_layout)
         left_layout.addWidget(QLabel("Selected Databases:"))
         left_layout.addWidget(self.db_list_widget)
+
+        self.show_full_path_checkbox = QCheckBox("Show Full Path")
+        left_layout.addWidget(self.show_full_path_checkbox)
+
         self.db_dock_widget.setWidget(left_pane)
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.db_dock_widget)
@@ -142,6 +148,8 @@ class MainWindow(QMainWindow):
         self.copy_button.clicked.connect(self.copy_all_results_to_clipboard)
         self.save_button.clicked.connect(self.save_results_to_file)
         self.db_list_widget.itemChanged.connect(self.on_db_item_changed)
+        self.show_full_path_checkbox.stateChanged.connect(self.update_db_list_display)
+
 
         self.load_config()
         self.populate_db_list()
@@ -154,11 +162,16 @@ class MainWindow(QMainWindow):
     def on_db_item_changed(self, item):
         self.save_config()
 
+    def update_db_list_display(self):
+        self.populate_db_list()
+        self.save_config()
+
     def load_config(self):
         try:
             with open(CONFIG_FILE, 'r') as f:
                 config = json.load(f)
                 self.databases = config.get("databases", [])
+                self.show_full_path_checkbox.setChecked(config.get("show_full_path", False))
 
                 geometry = config.get("window_geometry")
                 if geometry:
@@ -176,13 +189,15 @@ class MainWindow(QMainWindow):
         current_databases = []
         for i in range(self.db_list_widget.count()):
             item = self.db_list_widget.item(i)
+            path = item.data(Qt.ItemDataRole.UserRole)
             current_databases.append({
-                "path": item.text(),
+                "path": path,
                 "checked": item.checkState() == Qt.CheckState.Checked
             })
 
         config = {
             "databases": current_databases,
+            "show_full_path": self.show_full_path_checkbox.isChecked(),
             "window_geometry": self.saveGeometry().toHex().data().decode(),
             "window_state": self.saveState().toHex().data().decode()
         }
@@ -193,8 +208,12 @@ class MainWindow(QMainWindow):
     def populate_db_list(self):
         self.db_list_widget.blockSignals(True)
         self.db_list_widget.clear()
+        show_full_path = self.show_full_path_checkbox.isChecked()
         for db in self.databases:
-            item = QListWidgetItem(db["path"])
+            path = db["path"]
+            display_text = path if show_full_path else os.path.basename(path)
+            item = QListWidgetItem(display_text)
+            item.setData(Qt.ItemDataRole.UserRole, path)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if db.get("checked", True) else Qt.CheckState.Unchecked)
             self.db_list_widget.addItem(item)
@@ -218,7 +237,7 @@ class MainWindow(QMainWindow):
         if not selected_items:
             return
 
-        paths_to_remove = {item.text() for item in selected_items}
+        paths_to_remove = {item.data(Qt.ItemDataRole.UserRole) for item in selected_items}
         self.databases = [db for db in self.databases if db["path"] not in paths_to_remove]
 
         self.populate_db_list()
@@ -237,7 +256,8 @@ class MainWindow(QMainWindow):
         for i in range(self.db_list_widget.count()):
             item = self.db_list_widget.item(i)
             if item.checkState() == Qt.CheckState.Checked:
-                checked_db_paths.append(item.text())
+                path = item.data(Qt.ItemDataRole.UserRole)
+                checked_db_paths.append(path)
 
         if not search_term or not checked_db_paths:
             return
@@ -265,7 +285,9 @@ class MainWindow(QMainWindow):
         table_key = (db_path, table_name)
 
         if table_key not in self.result_tables:
-            info_label = QLabel(f"<b>Database:</b> {db_path} &nbsp;&nbsp; <b>Table:</b> {table_name}")
+            show_full_path = self.show_full_path_checkbox.isChecked()
+            display_db_path = db_path if show_full_path else os.path.basename(db_path)
+            info_label = QLabel(f"<b>Database:</b> {display_db_path} &nbsp;&nbsp; <b>Table:</b> {table_name}")
             info_label.setTextFormat(Qt.TextFormat.RichText)
             self.results_layout.addWidget(info_label)
 
