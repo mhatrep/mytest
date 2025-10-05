@@ -16,7 +16,7 @@ from PyQt6.QtGui import QColor, QClipboard, QAction
 CONFIG_FILE = "config.json"
 
 class SearchThread(QThread):
-    match_found = pyqtSignal(dict)
+    results_found = pyqtSignal(dict)
     search_finished = pyqtSignal()
 
     def __init__(self, db_paths, search_term):
@@ -47,15 +47,17 @@ class SearchThread(QThread):
 
                 search_params = (f'%{self.search_term}%',) * len(column_names)
 
-                for row in cursor.execute(query, search_params):
+                rows = cursor.execute(query, search_params).fetchall()
+
+                if rows:
                     result_data = {
                         "db_path": db_path,
                         "table_name": table_name,
                         "headers": column_names,
-                        "row": row,
+                        "rows": rows,
                         "search_term": self.search_term
                     }
-                    self.match_found.emit(result_data)
+                    self.results_found.emit(result_data)
 
         except sqlite3.Error as e:
             table_name_for_error = table_tuple[0] if 'table_tuple' in locals() else 'N/A'
@@ -270,11 +272,11 @@ class MainWindow(QMainWindow):
         self.results_layout.addWidget(self.searching_label)
 
         self.search_thread = SearchThread(checked_db_paths, search_term)
-        self.search_thread.match_found.connect(self.append_result_table)
+        self.search_thread.results_found.connect(self.add_result_batch)
         self.search_thread.search_finished.connect(self.on_search_finished)
         self.search_thread.start()
 
-    def append_result_table(self, result_data):
+    def add_result_batch(self, result_data):
         if self.searching_label:
             self.searching_label.deleteLater()
             self.searching_label = None
@@ -309,21 +311,23 @@ class MainWindow(QMainWindow):
         else:
             table = self.result_tables[table_key]
 
-        row_data = result_data['row']
-        row_position = table.rowCount()
-        table.insertRow(row_position)
-        for col_index, cell_data in enumerate(row_data):
-            cell_text = str(cell_data)
-            label = QLabel()
-            label.setWordWrap(True)
-            if search_term.lower() in cell_text.lower():
-                # Use regex for case-insensitive replacement
-                pattern = re.compile(re.escape(search_term), re.IGNORECASE)
-                highlighted_text = pattern.sub(f"<span style='background-color: yellow;'>\\g<0></span>", cell_text)
-                label.setText(highlighted_text)
-            else:
-                label.setText(cell_text)
-            table.setCellWidget(row_position, col_index, label)
+        rows = result_data['rows']
+        start_row = table.rowCount()
+        table.setRowCount(start_row + len(rows))
+        for row_index, row_data in enumerate(rows):
+            row_position = start_row + row_index
+            for col_index, cell_data in enumerate(row_data):
+                cell_text = str(cell_data)
+                label = QLabel()
+                label.setWordWrap(True)
+                if search_term.lower() in cell_text.lower():
+                    # Use regex for case-insensitive replacement
+                    pattern = re.compile(re.escape(search_term), re.IGNORECASE)
+                    highlighted_text = pattern.sub(f"<span style='background-color: yellow;'>\\g<0></span>", cell_text)
+                    label.setText(highlighted_text)
+                else:
+                    label.setText(cell_text)
+                table.setCellWidget(row_position, col_index, label)
 
 
     def on_search_finished(self):
