@@ -1,6 +1,7 @@
 import sys
 import sqlite3
 import json
+import re
 import concurrent.futures
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -289,16 +290,23 @@ class MainWindow(QMainWindow):
         row_position = table.rowCount()
         table.insertRow(row_position)
         for col_index, cell_data in enumerate(row_data):
-            item = QTableWidgetItem(str(cell_data))
-            if search_term.lower() in str(cell_data).lower():
-                item.setBackground(QColor("yellow"))
-            table.setItem(row_position, col_index, item)
+            cell_text = str(cell_data)
+            label = QLabel()
+            if search_term.lower() in cell_text.lower():
+                # Use regex for case-insensitive replacement
+                pattern = re.compile(re.escape(search_term), re.IGNORECASE)
+                highlighted_text = pattern.sub(f"<span style='background-color: yellow;'>\\g<0></span>", cell_text)
+                label.setText(highlighted_text)
+            else:
+                label.setText(cell_text)
+            table.setCellWidget(row_position, col_index, label)
 
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
 
         # Adjust table height to show all rows
-        total_height = table.horizontalHeader().height() + table.verticalHeader().length()
+        content_height = sum(table.rowHeight(i) for i in range(table.rowCount()))
+        total_height = table.horizontalHeader().height() + content_height + (table.frameWidth() * 2)
         table.setFixedHeight(total_height)
 
     def on_search_finished(self):
@@ -322,7 +330,15 @@ class MainWindow(QMainWindow):
             headers = [table.horizontalHeaderItem(i).text() for i in range(table.columnCount())]
             rows_data = []
             for row in range(table.rowCount()):
-                rows_data.append([table.item(row, col).text() for col in range(table.columnCount())])
+                row_data = []
+                for col in range(table.columnCount()):
+                    widget = table.cellWidget(row, col)
+                    if widget and isinstance(widget, QLabel):
+                        row_data.append(widget.text())
+                    else:
+                        item = table.item(row, col)
+                        row_data.append(item.text() if item else "")
+                rows_data.append(row_data)
 
             if not headers and not rows_data:
                 continue
