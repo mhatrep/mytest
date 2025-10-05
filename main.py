@@ -319,6 +319,7 @@ class MainWindow(QMainWindow):
             for col_index, cell_data in enumerate(row_data):
                 cell_text = str(cell_data)
                 label = QLabel()
+                label.setStyleSheet("padding: 20px;")
                 label.setWordWrap(True)
                 if search_term.lower() in cell_text.lower():
                     # Use regex for case-insensitive replacement
