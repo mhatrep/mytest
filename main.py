@@ -292,7 +292,6 @@ class MainWindow(QMainWindow):
         for col_index, cell_data in enumerate(row_data):
             cell_text = str(cell_data)
             label = QLabel()
-            label.setWordWrap(True)
             if search_term.lower() in cell_text.lower():
                 # Use regex for case-insensitive replacement
                 pattern = re.compile(re.escape(search_term), re.IGNORECASE)
