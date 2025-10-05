@@ -293,6 +293,7 @@ class MainWindow(QMainWindow):
         for col_index, cell_data in enumerate(row_data):
             cell_text = str(cell_data)
             label = QLabel()
+            label.setWordWrap(True)
             if search_term.lower() in cell_text.lower():
                 # Use regex for case-insensitive replacement
                 pattern = re.compile(re.escape(search_term), re.IGNORECASE)
@@ -310,7 +311,9 @@ class MainWindow(QMainWindow):
         for table in self.result_tables.values():
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
-            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            content_height = sum(table.rowHeight(i) for i in range(table.rowCount()))
+            total_height = table.horizontalHeader().height() + content_height + (table.frameWidth() * 2)
+            table.setFixedHeight(total_height)
 
         self.search_button.setEnabled(True)
 
@@ -334,7 +337,9 @@ class MainWindow(QMainWindow):
                 for col in range(table.columnCount()):
                     widget = table.cellWidget(row, col)
                     if widget and isinstance(widget, QLabel):
-                        row_data.append(widget.text())
+                        # Strip HTML tags for clean export
+                        clean_text = re.sub('<[^<]+?>', '', widget.text())
+                        row_data.append(clean_text)
                     else:
                         item = table.item(row, col)
                         row_data.append(item.text() if item else "")
