@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
         self.results_container = QWidget()
         self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.results_layout.setSpacing(10)
         self.results_area.setWidget(self.results_container)
 
         right_layout.addWidget(QLabel("Search Term:"))
@@ -309,9 +310,7 @@ class MainWindow(QMainWindow):
         for table in self.result_tables.values():
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
-            content_height = sum(table.rowHeight(i) for i in range(table.rowCount()))
-            total_height = table.horizontalHeader().height() + content_height + (table.frameWidth() * 2)
-            table.setFixedHeight(total_height)
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.search_button.setEnabled(True)
 
