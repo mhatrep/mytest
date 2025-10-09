@@ -1,4 +1,4 @@
-import fitz as pymupdf  # PyMuPDF
+import fitz  # PyMuPDF
 import os
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -44,7 +44,7 @@ class PdfToImageConverter(QObject):
                 pdf_output_dir = os.path.join(self.output_dir, pdf_name)
                 os.makedirs(pdf_output_dir, exist_ok=True)
 
-                doc = pymupdf.open(file_path)
+                doc = fitz.open(file_path)
                 pages_to_convert = self.parse_page_range(self.page_range_str, len(doc))
 
                 total_pages = len(pages_to_convert)
