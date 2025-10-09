@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-selfcheck.json
+
+# Test files
+*.db
+*.pdf
+*.xlsx
+*.csv
+*.tsv
+*.png
+*.jpg
+*.jpeg
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
