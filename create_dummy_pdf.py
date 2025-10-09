@@ -1,8 +1,8 @@
-import fitz
+import fitz as pymupdf
 import argparse
 
 def create_dummy_pdf(filename="test.pdf", num_pages=5):
-    doc = fitz.open()
+    doc = pymupdf.open()
     for i in range(num_pages):
         page = doc.new_page()
         page.insert_text((50, 72), f"This is page {i+1}.")
