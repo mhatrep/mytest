@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QRadioButton, QGroupBox, QHBoxLayout, QProgressBar, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QRadioButton, QGroupBox, QHBoxLayout, QProgressBar, QTextEdit, QListWidget, QAbstractItemView
 from PyQt6.QtCore import QThread
 from src.converters.sqlite_converter import SQLiteConverter
 
@@ -13,11 +13,19 @@ class SQLiteConverterWidget(QWidget):
         self.layout = QVBoxLayout(self)
 
         # File selection
+        file_button_layout = QHBoxLayout()
         self.select_files_button = QPushButton("Select SQLite Files")
         self.select_files_button.clicked.connect(self.select_files)
-        self.selected_files_label = QLabel("No files selected.")
-        self.layout.addWidget(self.select_files_button)
-        self.layout.addWidget(self.selected_files_label)
+        file_button_layout.addWidget(self.select_files_button)
+
+        self.remove_files_button = QPushButton("Remove Selected")
+        self.remove_files_button.clicked.connect(self.remove_selected_files)
+        file_button_layout.addWidget(self.remove_files_button)
+        self.layout.addLayout(file_button_layout)
+
+        self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.layout.addWidget(self.file_list)
 
         # Output directory selection
         self.select_output_dir_button = QPushButton("Select Output Directory")
@@ -54,8 +62,7 @@ class SQLiteConverterWidget(QWidget):
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select SQLite Files", "", "SQLite Files (*.db *.sqlite)")
         if files:
-            self.selected_files = files
-            self.selected_files_label.setText(f"{len(files)} file(s) selected.")
+            self.add_files(files)
 
     def select_output_dir(self):
         dir = QFileDialog.getExistingDirectory(self, "Select Output Directory")
@@ -71,7 +78,7 @@ class SQLiteConverterWidget(QWidget):
         return ','
 
     def start_conversion(self):
-        if not self.selected_files:
+        if self.file_list.count() == 0:
             self.log_message("Please select files to convert.")
             return
         if not self.output_dir:
@@ -82,8 +89,9 @@ class SQLiteConverterWidget(QWidget):
         self.progress_bar.setValue(0)
         self.log_area.clear()
 
+        files_to_convert = [self.file_list.item(i).text() for i in range(self.file_list.count())]
         delimiter = self.get_delimiter()
-        self.worker = SQLiteConverter(self.selected_files, self.output_dir, delimiter)
+        self.worker = SQLiteConverter(files_to_convert, self.output_dir, delimiter)
         self.worker_thread = QThread()
         self.worker.moveToThread(self.worker_thread)
 
@@ -104,6 +112,12 @@ class SQLiteConverterWidget(QWidget):
     def log_message(self, message):
         self.log_area.append(message)
 
+    def add_files(self, files):
+        current_files = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+        for file in files:
+            if file not in current_files:
+                self.file_list.addItem(file)
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
@@ -118,6 +132,8 @@ class SQLiteConverterWidget(QWidget):
                 files.append(file_path)
 
         if files:
-            self.selected_files.extend(files)
-            self.selected_files = list(dict.fromkeys(self.selected_files)) # remove duplicates
-            self.selected_files_label.setText(f"{len(self.selected_files)} file(s) selected.")
+            self.add_files(files)
+
+    def remove_selected_files(self):
+        for item in self.file_list.selectedItems():
+            self.file_list.takeItem(self.file_list.row(item))

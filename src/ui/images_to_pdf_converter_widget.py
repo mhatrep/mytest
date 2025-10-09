@@ -9,9 +9,15 @@ class ImagesToPdfConverterWidget(QWidget):
         self.layout = QVBoxLayout(self)
 
         # File selection
+        file_button_layout = QHBoxLayout()
         self.select_files_button = QPushButton("Select Images")
         self.select_files_button.clicked.connect(self.select_files)
-        self.layout.addWidget(self.select_files_button)
+        file_button_layout.addWidget(self.select_files_button)
+
+        self.remove_files_button = QPushButton("Remove Selected")
+        self.remove_files_button.clicked.connect(self.remove_selected_files)
+        file_button_layout.addWidget(self.remove_files_button)
+        self.layout.addLayout(file_button_layout)
 
         # File list for reordering
         self.file_list = QListWidget()
@@ -43,7 +49,7 @@ class ImagesToPdfConverterWidget(QWidget):
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select Images", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)")
         if files:
-            self.file_list.addItems(files)
+            self.add_files(files)
 
     def start_conversion(self):
         if self.file_list.count() == 0:
@@ -81,3 +87,29 @@ class ImagesToPdfConverterWidget(QWidget):
 
     def log_message(self, message):
         self.log_area.append(message)
+
+    def add_files(self, files):
+        current_files = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+        for file in files:
+            if file not in current_files:
+                self.file_list.addItem(file)
+
+    def remove_selected_files(self):
+        for item in self.file_list.selectedItems():
+            self.file_list.takeItem(self.file_list.row(item))
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        files = []
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                files.append(file_path)
+
+        if files:
+            self.add_files(files)

@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QListWidget, QAbstractItemView, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QListWidget, QAbstractItemView, QTextEdit, QHBoxLayout
 from PyQt6.QtCore import QThread
 from src.converters.pdf_merger import PdfMerger
 
@@ -10,13 +10,20 @@ class PdfMergerWidget(QWidget):
         self.layout = QVBoxLayout(self)
 
         # File selection
+        file_button_layout = QHBoxLayout()
         self.select_files_button = QPushButton("Select PDF Files to Merge")
         self.select_files_button.clicked.connect(self.select_files)
-        self.layout.addWidget(self.select_files_button)
+        file_button_layout.addWidget(self.select_files_button)
+
+        self.remove_files_button = QPushButton("Remove Selected")
+        self.remove_files_button.clicked.connect(self.remove_selected_files)
+        file_button_layout.addWidget(self.remove_files_button)
+        self.layout.addLayout(file_button_layout)
 
         # File list
         self.file_list = QListWidget()
         self.file_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.layout.addWidget(self.file_list)
 
         # Merge button
@@ -32,7 +39,7 @@ class PdfMergerWidget(QWidget):
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select PDF Files", "", "PDF Files (*.pdf)")
         if files:
-            self.file_list.addItems(files)
+            self.add_files(files)
 
     def start_merging(self):
         if self.file_list.count() < 2:
@@ -82,4 +89,14 @@ class PdfMergerWidget(QWidget):
                 files.append(file_path)
 
         if files:
-            self.file_list.addItems(files)
+            self.add_files(files)
+
+    def add_files(self, files):
+        current_files = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+        for file in files:
+            if file not in current_files:
+                self.file_list.addItem(file)
+
+    def remove_selected_files(self):
+        for item in self.file_list.selectedItems():
+            self.file_list.takeItem(self.file_list.row(item))

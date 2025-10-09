@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QLineEdit, QComboBox, QSpinBox, QGroupBox, QHBoxLayout, QProgressBar, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QLineEdit, QComboBox, QSpinBox, QGroupBox, QHBoxLayout, QProgressBar, QTextEdit, QListWidget, QAbstractItemView
 from PyQt6.QtCore import QThread
 from src.converters.pdf_to_image_converter import PdfToImageConverter
 
@@ -13,11 +13,19 @@ class PdfToImageConverterWidget(QWidget):
         self.layout = QVBoxLayout(self)
 
         # File selection
+        file_button_layout = QHBoxLayout()
         self.select_files_button = QPushButton("Select PDF Files")
         self.select_files_button.clicked.connect(self.select_files)
-        self.selected_files_label = QLabel("No files selected.")
-        self.layout.addWidget(self.select_files_button)
-        self.layout.addWidget(self.selected_files_label)
+        file_button_layout.addWidget(self.select_files_button)
+
+        self.remove_files_button = QPushButton("Remove Selected")
+        self.remove_files_button.clicked.connect(self.remove_selected_files)
+        file_button_layout.addWidget(self.remove_files_button)
+        self.layout.addLayout(file_button_layout)
+
+        self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.layout.addWidget(self.file_list)
 
         # Output directory selection
         self.select_output_dir_button = QPushButton("Select Output Directory")
@@ -66,8 +74,7 @@ class PdfToImageConverterWidget(QWidget):
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select PDF Files", "", "PDF Files (*.pdf)")
         if files:
-            self.selected_files = files
-            self.selected_files_label.setText(f"{len(files)} file(s) selected.")
+            self.add_files(files)
 
     def select_output_dir(self):
         dir = QFileDialog.getExistingDirectory(self, "Select Output Directory")
@@ -76,7 +83,7 @@ class PdfToImageConverterWidget(QWidget):
             self.output_dir_label.setText(dir)
 
     def start_conversion(self):
-        if not self.selected_files:
+        if self.file_list.count() == 0:
             self.log_message("Please select files to convert.")
             return
         if not self.output_dir:
@@ -91,7 +98,8 @@ class PdfToImageConverterWidget(QWidget):
         image_format = self.image_format_combo.currentText().lower()
         dpi = self.dpi_spinbox.value()
 
-        self.worker = PdfToImageConverter(self.selected_files, self.output_dir, page_range, image_format, dpi)
+        files_to_convert = [self.file_list.item(i).text() for i in range(self.file_list.count())]
+        self.worker = PdfToImageConverter(files_to_convert, self.output_dir, page_range, image_format, dpi)
         self.worker_thread = QThread()
         self.worker.moveToThread(self.worker_thread)
 
@@ -112,6 +120,12 @@ class PdfToImageConverterWidget(QWidget):
     def log_message(self, message):
         self.log_area.append(message)
 
+    def add_files(self, files):
+        current_files = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+        for file in files:
+            if file not in current_files:
+                self.file_list.addItem(file)
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
@@ -126,6 +140,8 @@ class PdfToImageConverterWidget(QWidget):
                 files.append(file_path)
 
         if files:
-            self.selected_files.extend(files)
-            self.selected_files = list(dict.fromkeys(self.selected_files)) # remove duplicates
-            self.selected_files_label.setText(f"{len(self.selected_files)} file(s) selected.")
+            self.add_files(files)
+
+    def remove_selected_files(self):
+        for item in self.file_list.selectedItems():
+            self.file_list.takeItem(self.file_list.row(item))
