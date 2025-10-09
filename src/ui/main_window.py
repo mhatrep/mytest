@@ -13,14 +13,11 @@ class MainWindow(QMainWindow):
         # Create dummy widgets for tabs for now
         from .sqlite_converter_widget import SQLiteConverterWidget
         from .excel_converter_widget import ExcelConverterWidget
-        from .pdf_to_image_converter_widget import PdfToImageConverterWidget
-        from .pdf_merger_widget import PdfMergerWidget
+        from .pdf_operations_widget import PdfOperationsWidget
         self.sqlite_tab = SQLiteConverterWidget()
         self.excel_tab = ExcelConverterWidget()
-        self.pdf_image_tab = PdfToImageConverterWidget()
-        self.pdf_merge_tab = PdfMergerWidget()
+        self.pdf_operations_tab = PdfOperationsWidget()
 
         self.tabs.addTab(self.sqlite_tab, "SQLite to CSV/TSV")
         self.tabs.addTab(self.excel_tab, "Excel to CSV/TSV")
-        self.tabs.addTab(self.pdf_image_tab, "PDF to Image")
-        self.tabs.addTab(self.pdf_merge_tab, "PDF Merge")
+        self.tabs.addTab(self.pdf_operations_tab, "PDF Operations")
