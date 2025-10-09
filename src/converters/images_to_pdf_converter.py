@@ -1,4 +1,4 @@
-import fitz  # PyMuPDF
+import pymupdf
 from PyQt6.QtCore import QObject, pyqtSignal
 
 class ImagesToPdfConverter(QObject):
@@ -16,7 +16,7 @@ class ImagesToPdfConverter(QObject):
     def run(self):
         try:
             self.log_message.emit("Starting image to PDF conversion...")
-            doc = fitz.open()
+            doc = pymupdf.open()
             total_files = len(self.files)
 
             for i, img_path in enumerate(self.files):
@@ -25,14 +25,14 @@ class ImagesToPdfConverter(QObject):
                     break
 
                 self.log_message.emit(f"  Processing {img_path}...")
-                img_doc = fitz.open(img_path)
+                img_doc = pymupdf.open(img_path)
                 rect = img_doc[0].rect
 
                 # Determine page size based on orientation
                 if self.orientation == "Landscape":
-                    page_rect = fitz.Rect(0, 0, max(rect.width, rect.height), min(rect.width, rect.height))
+                    page_rect = pymupdf.Rect(0, 0, max(rect.width, rect.height), min(rect.width, rect.height))
                 else: # Portrait
-                    page_rect = fitz.Rect(0, 0, min(rect.width, rect.height), max(rect.width, rect.height))
+                    page_rect = pymupdf.Rect(0, 0, min(rect.width, rect.height), max(rect.width, rect.height))
 
                 page = doc.new_page(width=page_rect.width, height=page_rect.height)
                 page.insert_image(page_rect, filename=img_path)
