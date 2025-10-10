@@ -1,0 +1,6 @@
+Date,Region,Salesperson,Product,Quantity,Unit_Price,Revenue
+2024-01-03,North,Alice,Laptop,2,900,1800
+2024-01-05,South,Bob,Monitor,4,200,800
+2024-01-08,West,Charlie,Keyboard,10,50,500
+2024-01-12,North,Bob,Mouse,15,25,375
+2024-01-18,East,Alice,Laptop,1,950,950

@@ -1,0 +1,7 @@
+COLUMN_NAME,DATA_01,DATA_02,DATA_03,DATA_04,DATA_05,DATA_06,DATA_07,DATA_08,DATA_09,DATA_10
+ProductID,P001,P002,P003,P004,P005,P006,P007,P008,P009,P010
+Product,Laptop,Monitor,Keyboard,Mouse,Docking Station,Webcam,Printer,Chair,Desk,Phone Stand
+Category,Electronics,Electronics,Accessories,Accessories,Electronics,Accessories,Electronics,Furniture,Furniture,Accessories
+In_Stock,12,25,40,60,10,35,8,14,6,50
+Reorder_Level,5,10,15,20,5,10,5,5,3,20
+Region,North,North,South,South,East,East,West,West,North,South

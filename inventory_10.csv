@@ -1,0 +1,11 @@
+ProductID,Product,Category,In_Stock,Reorder_Level,Region
+P001,Laptop,Electronics,12,5,North
+P002,Monitor,Electronics,25,10,North
+P003,Keyboard,Accessories,40,15,South
+P004,Mouse,Accessories,60,20,South
+P005,Docking Station,Electronics,10,5,East
+P006,Webcam,Accessories,35,10,East
+P007,Printer,Electronics,8,5,West
+P008,Chair,Furniture,14,5,West
+P009,Desk,Furniture,6,3,North
+P010,Phone Stand,Accessories,50,20,South
