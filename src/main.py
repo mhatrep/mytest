@@ -17,37 +17,30 @@ class Worker(QObject):
     finished = pyqtSignal(object)
     progress = pyqtSignal(int)
 
-    def __init__(self, df_iterator, options, total_rows):
+    def __init__(self, data_iterator, options):
         super().__init__()
-        self.df_iterator = df_iterator
+        self.data_iterator = data_iterator
         self.options = options
-        self.total_rows = total_rows
         self.is_cancelled = False
 
     def run(self):
         cleaned_chunks = []
-        rows_processed = 0
+        try:
+            for chunk in self.data_iterator:
+                if self.is_cancelled:
+                    break
+                cleaned_chunk = clean_data(chunk, self.options)
+                cleaned_chunks.append(cleaned_chunk)
+                # Since we don't know the total size, we can't emit progress
+        finally:
+            # Important: The iterator might be a file handle that needs closing
+            if hasattr(self.data_iterator, 'close'):
+                self.data_iterator.close()
 
-        iterator = self.df_iterator
-        if isinstance(self.df_iterator, pd.DataFrame): # Handle single dataframe
-            iterator = [self.df_iterator]
-
-        if iterator is None:
-            self.finished.emit(pd.DataFrame())
-            return
-
-        for chunk in iterator:
-            if self.is_cancelled:
-                break
-            cleaned_chunk = clean_data(chunk, self.options)
-            cleaned_chunks.append(cleaned_chunk)
-            rows_processed += len(chunk)
-            if self.total_rows > 0:
-                self.progress.emit(int(rows_processed * 100 / self.total_rows))
-
-        if not self.is_cancelled:
-            self.progress.emit(100)
+        if not self.is_cancelled and cleaned_chunks:
             self.finished.emit(pd.concat(cleaned_chunks, ignore_index=True))
+        else:
+            self.finished.emit(pd.DataFrame()) # Emit empty frame on cancel/error
 
     def cancel(self):
         self.is_cancelled = True
@@ -57,7 +50,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CSV Cleaner")
         self.setGeometry(100, 100, 1200, 800)
-        self.df = pd.DataFrame()
+        self.df = None # Full dataframe for clipboard data
+        self.df_preview = None # Preview dataframe for files
+        self.source_file_path = None
+        self.source_is_clipboard = False
         self.detected_delimiter = None
 
         # Main widget and layout
@@ -132,75 +128,84 @@ class MainWindow(QMainWindow):
     def browse_file(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "CSV Files (*.csv);;TSV Files (*.tsv);;Text Files (*.txt);;All Files (*)")
         if file_name:
+            self.source_file_path = file_name
+            self.source_is_clipboard = False
             self.file_path_edit.setText(file_name)
-            self.load_data(file_name)
+            self.load_data()
 
     def paste_from_clipboard(self):
         clipboard_text = QApplication.clipboard().text()
         if clipboard_text:
-            self.load_data(io.StringIO(clipboard_text))
+            self.source_is_clipboard = True
+            self.source_file_path = None
+            self.df = pd.read_csv(io.StringIO(clipboard_text), sep=None, engine='python', on_bad_lines='skip')
+            self.df_preview = self.df.head(1000)
+            self.model = PandasModel(self.df_preview)
+            self.table_preview.setModel(self.model)
             self.file_path_edit.setText("Pasted from clipboard")
+            self.status_bar.showMessage(f"Loaded {len(self.df)} rows from clipboard.", 5000)
         else:
             self.status_bar.showMessage("Clipboard is empty.", 5000)
 
-    def load_data(self, file_path_or_buffer):
-        delimiter = self.delimiter_combo.currentText()
-        if delimiter == 'Auto':
-            if isinstance(file_path_or_buffer, str):
-                with open(file_path_or_buffer, 'r', encoding=self.encoding_combo.currentText()) as f:
-                    sample = f.read(2048)
-                    f.seek(0)
-            else: # StringIO
-                sample = file_path_or_buffer.read(2048)
-                file_path_or_buffer.seek(0)
+    def load_data(self):
+        if self.source_is_clipboard or not self.source_file_path:
+            return
 
+        delimiter = self.delimiter_combo.currentText()
+        encoding = self.encoding_combo.currentText()
+
+        if delimiter == 'Auto':
+            with open(self.source_file_path, 'r', encoding=encoding) as f:
+                sample = f.read(2048)
             try:
                 dialect = csv.Sniffer().sniff(sample)
                 delimiter = dialect.delimiter
                 self.detected_delimiter = delimiter
                 self.status_bar.showMessage(f"Detected delimiter: '{delimiter}'", 5000)
-            except csv.Error:
+            except (csv.Error, TypeError):
                 self.status_bar.showMessage("Could not detect delimiter, using ','", 5000)
                 delimiter = ','
                 self.detected_delimiter = delimiter
 
         try:
             # For preview, just load the first 1000 rows
-            self.df_preview = pd.read_csv(file_path_or_buffer, sep=delimiter, encoding=self.encoding_combo.currentText(), engine='python', on_bad_lines='skip', nrows=1000)
+            self.df_preview = pd.read_csv(self.source_file_path, sep=delimiter, encoding=encoding, engine='python', on_bad_lines='skip', nrows=1000)
             self.model = PandasModel(self.df_preview)
             self.table_preview.setModel(self.model)
-
-            # For processing, create an iterator
-            if isinstance(file_path_or_buffer, str):
-                self.df_iterator = pd.read_csv(file_path_or_buffer, sep=delimiter, encoding=self.encoding_combo.currentText(), engine='python', on_bad_lines='skip', chunksize=10000)
-                self.status_bar.showMessage(f"Previewing first {len(self.df_preview)} rows. Ready to process full file.", 5000)
-            else:
-                # For StringIO, we can't re-iterate, so we have to load it all.
-                file_path_or_buffer.seek(0)
-                self.df = pd.read_csv(file_path_or_buffer, sep=delimiter, encoding=self.encoding_combo.currentText(), engine='python', on_bad_lines='skip')
-                self.df_iterator = None
-                self.status_bar.showMessage(f"Loaded {len(self.df)} rows from clipboard.", 5000)
-
+            self.status_bar.showMessage(f"Previewing first {len(self.df_preview)} rows. Ready to process full file.", 5000)
         except Exception as e:
             self.status_bar.showMessage(f"Error loading file: {e}", 5000)
 
     def run_cleaning_in_thread(self):
-        if not hasattr(self, 'df_preview') or self.df_preview.empty:
-            self.status_bar.showMessage("No data to process.", 5000)
+        if not self.source_file_path and not self.source_is_clipboard:
+            self.status_bar.showMessage("No data loaded to process.", 5000)
             return
 
         options = self.get_cleaning_options()
 
-        # The pre-counting of total_rows was causing the UI to freeze.
-        # We will now run without a total count and show an indeterminate progress bar.
-        total_rows = 0
+        data_iterator = None
+        if self.source_is_clipboard and self.df is not None:
+            # For clipboard data, we process the in-memory DataFrame
+            data_iterator = iter([self.df])
+        elif self.source_file_path:
+            # For file data, create the iterator just-in-time
+            delimiter = self.detected_delimiter or ','
+            encoding = self.encoding_combo.currentText()
+            try:
+                data_iterator = pd.read_csv(
+                    self.source_file_path, sep=delimiter, encoding=encoding,
+                    engine='python', on_bad_lines='skip', chunksize=10000
+                )
+            except Exception as e:
+                self.status_bar.showMessage(f"Error creating file reader: {e}", 5000)
+                return
+
+        if data_iterator is None:
+            self.status_bar.showMessage("Could not create data iterator.", 5000)
+            return
 
         self.thread = QThread()
-        df_or_iterator = getattr(self, 'df_iterator', None)
-        if df_or_iterator is None and hasattr(self, 'df'):
-            df_or_iterator = [self.df] # Wrap df in a list to make it iterable for the worker
-
-        self.worker = Worker(df_or_iterator, options, total_rows)
+        self.worker = Worker(data_iterator, options)
         self.worker.moveToThread(self.thread)
 
         self.cancel_button = QPushButton("Cancel")
@@ -210,7 +215,6 @@ class MainWindow(QMainWindow):
 
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.on_cleaning_finished)
-        self.worker.progress.connect(self.on_progress)
 
         self.thread.finished.connect(self.thread.deleteLater)
         self.worker.finished.connect(self.thread.quit)
