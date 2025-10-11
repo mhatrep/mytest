@@ -191,28 +191,22 @@ class MainWindow(QMainWindow):
 
         options = self.get_cleaning_options()
 
-        # Estimate total rows for progress bar
+        # The pre-counting of total_rows was causing the UI to freeze.
+        # We will now run without a total count and show an indeterminate progress bar.
         total_rows = 0
-        if hasattr(self, 'df_iterator') and self.df_iterator is not None:
-             # This is a bit of a hack, we don't know the total rows without reading the file
-             # We will estimate it based on the file size.
-             if isinstance(self.df_iterator.f, str):
-                with open(self.df_iterator.f, 'r') as f:
-                    total_rows = sum(1 for line in f)
-        elif hasattr(self, 'df'):
-            total_rows = len(self.df)
-
 
         self.thread = QThread()
         df_or_iterator = getattr(self, 'df_iterator', None)
         if df_or_iterator is None and hasattr(self, 'df'):
             df_or_iterator = [self.df] # Wrap df in a list to make it iterable for the worker
+
         self.worker = Worker(df_or_iterator, options, total_rows)
         self.worker.moveToThread(self.thread)
 
         self.cancel_button = QPushButton("Cancel")
         self.status_bar.addPermanentWidget(self.cancel_button)
         self.cancel_button.clicked.connect(self.cancel_cleaning)
+        self.cancel_button.show()
 
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.on_cleaning_finished)
@@ -225,6 +219,7 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
         self.preview_button.setEnabled(False)
+        self.progress_bar.setRange(0, 0) # Indeterminate mode
         self.progress_bar.show()
         self.status_bar.showMessage("Cleaning data...")
 
