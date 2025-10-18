@@ -23,7 +23,7 @@ class TreeItem:
         if column == 0:
             return self._key
         if column == 1:
-            return self._value
+            return str(self._value) if self._value is not None else ""
         return None
 
     def parent(self):
@@ -43,16 +43,20 @@ class TreeModel(QAbstractItemModel):
     def _setup_model_data(self, data, parent):
         if isinstance(data, dict):
             for key, value in data.items():
-                child_item = TreeItem(key, None, parent)
+                if isinstance(value, (dict, list)):
+                    child_item = TreeItem(key, None, parent)
+                    self._setup_model_data(value, child_item)
+                else:
+                    child_item = TreeItem(key, value, parent)
                 parent.appendChild(child_item)
-                self._setup_model_data(value, child_item)
         elif isinstance(data, list):
             for i, value in enumerate(data):
-                child_item = TreeItem(f"[{i}]", None, parent)
+                if isinstance(value, (dict, list)):
+                    child_item = TreeItem(f"[{i}]", None, parent)
+                    self._setup_model_data(value, child_item)
+                else:
+                    child_item = TreeItem(f"[{i}]", value, parent)
                 parent.appendChild(child_item)
-                self._setup_model_data(value, child_item)
-        else:
-            parent._value = data
 
     def data(self, index, role):
         if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:

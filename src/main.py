@@ -23,6 +23,7 @@ class MainWindow(QMainWindow):
 
         # Create widgets
         self.tree_view = QTreeView()
+        self.tree_view.header().setStretchLastSection(True)
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter values...")
         self.case_sensitive_checkbox = QCheckBox("Case Sensitive")
@@ -64,6 +65,7 @@ class MainWindow(QMainWindow):
                 self.proxy_model = FilterProxyModel()
                 self.proxy_model.setSourceModel(self.model)
                 self.tree_view.setModel(self.proxy_model)
+                self.tree_view.expandAll()
             except Exception as e:
                 print(f"Error loading file: {e}")
 
@@ -71,6 +73,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "proxy_model"):
             self.proxy_model.set_filter_text(text)
             self.tree_view.expandAll()
+
 
     def _on_case_sensitive_toggled(self, checked):
         if hasattr(self, "proxy_model"):
