@@ -38,25 +38,41 @@ class TreeModel(QAbstractItemModel):
     def __init__(self, data, parent=None):
         super().__init__(parent)
         self._root_item = TreeItem("Key", "Value")
-        self._setup_model_data(data, self._root_item)
+        self._setup_model_data(data, self._root_item, 0)
 
-    def _setup_model_data(self, data, parent):
+    def _setup_model_data(self, data, parent, depth):
+        if depth > 10:
+            return
+
         if isinstance(data, dict):
             for key, value in data.items():
-                if isinstance(value, (dict, list)):
+                is_primitive_list = isinstance(value, list) and not any(isinstance(i, (dict, list)) for i in value)
+
+                if is_primitive_list:
+                    child_item = TreeItem(key, value, parent)
+                    parent.appendChild(child_item)
+                elif isinstance(value, (dict, list)):
                     child_item = TreeItem(key, None, parent)
-                    self._setup_model_data(value, child_item)
+                    parent.appendChild(child_item)
+                    self._setup_model_data(value, child_item, depth + 1)
                 else:
                     child_item = TreeItem(key, value, parent)
-                parent.appendChild(child_item)
+                    parent.appendChild(child_item)
         elif isinstance(data, list):
             for i, value in enumerate(data):
-                if isinstance(value, (dict, list)):
-                    child_item = TreeItem(f"[{i}]", None, parent)
-                    self._setup_model_data(value, child_item)
+                key = f"[{i}]"
+                is_primitive_list = isinstance(value, list) and not any(isinstance(i, (dict, list)) for i in value)
+
+                if is_primitive_list:
+                    child_item = TreeItem(key, value, parent)
+                    parent.appendChild(child_item)
+                elif isinstance(value, (dict, list)):
+                    child_item = TreeItem(key, None, parent)
+                    parent.appendChild(child_item)
+                    self._setup_model_data(value, child_item, depth + 1)
                 else:
-                    child_item = TreeItem(f"[{i}]", value, parent)
-                parent.appendChild(child_item)
+                    child_item = TreeItem(key, value, parent)
+                    parent.appendChild(child_item)
 
     def data(self, index, role):
         if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
