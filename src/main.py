@@ -1,19 +1,19 @@
 import sys
 from PyQt6.QtCore import Qt, QItemSelectionModel
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QTableView, QTreeView, QDockWidget,
-    QWidget, QVBoxLayout, QLineEdit, QCheckBox, QPushButton, QMenu,
+    QApplication, QMainWindow, QTableView, QDockWidget,
+    QWidget, QVBoxLayout, QLineEdit, QCheckBox, QPushButton, QMenu, QComboBox,
 )
 import csv
 import json
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QFileDialog
 from src.data_loader import load_data
-from src.tree_model import TreeModel
 from src.filter_proxy_model import FilterProxyModel
 from src.table_preview import TablePreviewDialog
 from src.pandas_model import PandasModel
 from src.settings_dialog import SettingsDialog
+from src.table_delegate import TableInCellDelegate
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -31,13 +31,14 @@ class MainWindow(QMainWindow):
         self.table_view = QTableView()
         self.table_view.setSelectionMode(self.table_view.SelectionMode.ExtendedSelection)
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
+        self.table_view.setItemDelegate(TableInCellDelegate(self.table_view))
         self.setCentralWidget(self.table_view)
 
         # Menu Bar
         self._create_menu_bar()
 
-        # Dock Widget for Tree View and Filtering
-        self._create_dock_widget()
+        # Filtering controls
+        self._create_filtering_controls()
 
     def _create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -90,38 +91,25 @@ class MainWindow(QMainWindow):
         )
         if file_path:
             try:
-                raw_data, df = load_data(file_path)
-                self.source_model = TreeModel(raw_data, settings=self.settings, source=file_path)
-                self.tree_view.setModel(self.source_model)
+                self.dataframes = load_data(file_path)
+                self.table_selector.clear()
+                self.table_selector.addItems(self.dataframes.keys())
 
-                self.pandas_model = PandasModel(df)
-                self.filter_proxy_model = FilterProxyModel(self)
-                self.filter_proxy_model.setSourceModel(self.pandas_model)
-                self.table_view.setModel(self.filter_proxy_model)
-                self.table_view.resizeColumnsToContents()
+                if self.dataframes:
+                    self.display_selected_table(list(self.dataframes.keys())[0])
 
-                # When the tree selection changes, update the table view
-                self.tree_view.selectionModel().selectionChanged.connect(self.sync_tree_to_table)
-                self.table_view.selectionModel().selectionChanged.connect(self.sync_table_to_tree)
             except Exception as e:
                 print(f"Error loading file: {e}")
 
-    def sync_table_to_tree(self, selected, deselected):
-        # This is a placeholder for future implementation
-        pass
-
-    def sync_tree_to_table(self, selected, deselected):
-        if not selected.indexes():
-            return
-
-        index = selected.indexes()[0]
-        item = index.internalPointer()
-
-        if isinstance(item._value, list) and all(isinstance(i, dict) for i in item._value):
-            df = pd.DataFrame(item._value)
+    def display_selected_table(self, table_path):
+        if table_path in self.dataframes:
+            df = self.dataframes[table_path]
             self.pandas_model = PandasModel(df)
+            self.filter_proxy_model = FilterProxyModel(self)
             self.filter_proxy_model.setSourceModel(self.pandas_model)
+            self.table_view.setModel(self.filter_proxy_model)
             self.table_view.resizeColumnsToContents()
+            self.table_view.resizeRowsToContents()
 
     def filter_text_changed(self, text):
         if hasattr(self, 'filter_proxy_model'):
@@ -204,41 +192,30 @@ class MainWindow(QMainWindow):
             self.settings = dialog.get_settings()
             print("Settings saved")
 
-    def _create_dock_widget(self):
-        dock_widget = QDockWidget("Navigation and Filtering", self)
-        dock_widget.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock_widget)
+    def _create_filtering_controls(self):
+        # A new toolbar for filtering controls
+        toolbar = self.addToolBar("Filtering")
 
-        # Layout for the dock widget
-        dock_content = QWidget()
-        layout = QVBoxLayout(dock_content)
+        self.table_selector = QComboBox()
+        self.table_selector.currentTextChanged.connect(self.display_selected_table)
+        toolbar.addWidget(self.table_selector)
 
-        # Filtering controls
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter by value...")
-        layout.addWidget(self.filter_input)
+        self.filter_input.textChanged.connect(self.filter_text_changed)
+        toolbar.addWidget(self.filter_input)
 
         self.case_sensitive_checkbox = QCheckBox("Match Case")
-        layout.addWidget(self.case_sensitive_checkbox)
+        self.case_sensitive_checkbox.stateChanged.connect(self.filter_options_changed)
+        toolbar.addWidget(self.case_sensitive_checkbox)
 
         self.regex_checkbox = QCheckBox("Use Regex")
-        layout.addWidget(self.regex_checkbox)
+        self.regex_checkbox.stateChanged.connect(self.filter_options_changed)
+        toolbar.addWidget(self.regex_checkbox)
 
         self.filter_value_only_checkbox = QCheckBox("Filter on Value only")
-        layout.addWidget(self.filter_value_only_checkbox)
-
-        # Connect filter controls
-        self.filter_input.textChanged.connect(self.filter_text_changed)
-        self.case_sensitive_checkbox.stateChanged.connect(self.filter_options_changed)
-        self.regex_checkbox.stateChanged.connect(self.filter_options_changed)
         self.filter_value_only_checkbox.stateChanged.connect(self.filter_options_changed)
-
-
-        # Navigation Tree
-        self.tree_view = QTreeView()
-        layout.addWidget(self.tree_view)
-
-        dock_widget.setWidget(dock_content)
+        toolbar.addWidget(self.filter_value_only_checkbox)
 
 
 if __name__ == "__main__":

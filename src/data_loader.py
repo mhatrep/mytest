@@ -3,30 +3,31 @@ import yaml
 import pandas as pd
 from lxml import etree
 
-def find_list_for_dataframe(data):
+def find_all_lists(data, path='', results=None):
     """
-    Finds the best list within the data to convert to a DataFrame.
-    It prioritizes lists of dictionaries.
-    If the root is a dictionary with a single list, it returns that list.
+    Recursively finds all lists of dictionaries in the data and returns them
+    with their corresponding paths.
     """
-    if isinstance(data, list) and all(isinstance(i, dict) for i in data):
-        return data
+    if results is None:
+        results = {}
 
     if isinstance(data, dict):
-        list_values = [v for v in data.values() if isinstance(v, list) and all(isinstance(i, dict) for i in v)]
-        if len(list_values) == 1:
-            return list_values[0]
+        for k, v in data.items():
+            new_path = f"{path}.{k}" if path else k
+            find_all_lists(v, new_path, results)
+    elif isinstance(data, list) and all(isinstance(i, dict) for i in data):
+        if not path:
+             path = "root"
+        results[path] = data
+        # Once we've identified a list of dicts, we don't need to recurse further into it
+        # for the purpose of finding more tables.
 
-        for key, value in data.items():
-            result = find_list_for_dataframe(value)
-            if result is not None:
-                return result
-    return None
+    return results
 
 def load_data(file_path):
     """
     Loads data from a file, supporting JSON, YAML, and XML formats.
-    Returns the full raw data and a pandas DataFrame of the first suitable list.
+    Returns a dictionary of pandas DataFrames, where keys are the paths to the lists.
     """
     raw_data = None
     if file_path.endswith('.json'):
@@ -36,21 +37,18 @@ def load_data(file_path):
         with open(file_path, 'r') as f:
             raw_data = yaml.safe_load(f)
     elif file_path.endswith('.xml'):
-        # For XML, we'll try to read it directly with pandas, which is often better for tabular data
         try:
+            # For XML, we'll let pandas do the heavy lifting
             df = pd.read_xml(file_path)
-            # To maintain consistency, we'll convert the df back to a dict for the tree view
-            raw_data = df.to_dict(orient='records')
-            return raw_data, df
+            return {'root': df}
         except Exception:
-             tree = etree.parse(file_path)
-             raw_data = etree_to_dict(tree.getroot())
+            tree = etree.parse(file_path)
+            raw_data = etree_to_dict(tree.getroot())
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
 
-    list_for_df = find_list_for_dataframe(raw_data)
-    df = pd.DataFrame(list_for_df) if list_for_df else pd.DataFrame()
-    return raw_data, df
+    all_lists = find_all_lists(raw_data)
+    return {path: pd.DataFrame(data) for path, data in all_lists.items()}
 
 def etree_to_dict(t):
     """

@@ -31,10 +31,9 @@ class FilterProxyModel(QSortFilterProxyModel):
             return True # Not a PandasModel
 
         df_row = model._data.iloc[source_row]
-        pattern = self.filterRegularExpression()
 
         for col in df_row.index:
-            if pattern.match(str(df_row[col])).hasMatch():
+            if self.filterRegularExpression().search(str(df_row[col])).hasMatch():
                 return True
         return False
 
