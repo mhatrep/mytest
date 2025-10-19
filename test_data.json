@@ -1,17 +1,13 @@
 [
   {
     "id": 1,
-    "name": "Order 1",
-    "items": [
-      { "sku": "A1", "price": 10.0 },
-      { "sku": "B2", "price": 20.0 }
-    ]
+    "name": "Product A",
+    "price": 10.99
   },
   {
     "id": 2,
-    "name": "Order 2",
-    "items": [
-      { "sku": "C3", "price": 30.0 }
-    ]
+    "name": "Product B",
+    "price": 5.50,
+    "in_stock": true
   }
 ]
