@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QItemSelectionModel
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTableView, QTreeView, QDockWidget,
     QWidget, QVBoxLayout, QLineEdit, QCheckBox, QPushButton, QMenu,
@@ -120,7 +120,7 @@ class MainWindow(QMainWindow):
         source_index = selected.indexes()[0]
         proxy_index = self.flat_proxy_model.mapFromSource(source_index)
         if proxy_index.isValid():
-            self.table_view.selectionModel().select(proxy_index, self.table_view.selectionModel().ClearAndSelect)
+            self.table_view.selectionModel().select(proxy_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
             self.table_view.scrollTo(proxy_index, self.table_view.ScrollHint.PositionAtCenter)
 
     def sync_table_to_tree(self, selected, deselected):
@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
         proxy_index = selected.indexes()[0]
         source_index = self.flat_proxy_model.mapToSource(proxy_index)
         if source_index.isValid():
-            self.tree_view.selectionModel().select(source_index, self.tree_view.selectionModel().ClearAndSelect)
+            self.tree_view.selectionModel().select(source_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
             self.tree_view.scrollTo(source_index, self.tree_view.ScrollHint.PositionAtCenter)
             # Expand the tree to the selected item
             parent = source_index.parent()
@@ -175,8 +175,8 @@ class MainWindow(QMainWindow):
             return
 
         index = selection[0]
-        # Path is in the first column
-        path_index = self.table_view.model().index(index.row(), 0)
+        # Path is in the second column
+        path_index = self.table_view.model().index(index.row(), 1)
         path = self.table_view.model().data(path_index)
 
         clipboard = QApplication.clipboard()
@@ -274,8 +274,6 @@ class MainWindow(QMainWindow):
         # Navigation Tree
         self.tree_view = QTreeView()
         layout.addWidget(self.tree_view)
-        for i in range(1, 6): # Hide all columns except the first one
-            self.tree_view.hideColumn(i)
 
         dock_widget.setWidget(dock_content)
 

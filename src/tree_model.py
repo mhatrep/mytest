@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QAbstractItemModel, QModelIndex, Qt
 
 class TreeItem:
-    def __init__(self, key, value, parent=None, depth=0, source=""):
+    def __init__(self, key, value, parent=None, depth=0, source="", array_level=0):
         self._parent = parent
         self._key = key
         self._value = value
@@ -9,6 +9,7 @@ class TreeItem:
         self._type = type(value).__name__
         self._depth = depth
         self._source = source
+        self._array_level = array_level
 
     def appendChild(self, item):
         self._children.append(item)
@@ -20,13 +21,13 @@ class TreeItem:
         return len(self._children)
 
     def columnCount(self):
-        return 6  # Path, Key, Type, Value, Depth, Source
+        return 7  # Key, Path, Type, Value, Depth, Array Level, Source
 
     def data(self, column):
         if column == 0:
-            return self.path()
-        elif column == 1:
             return self._key
+        elif column == 1:
+            return self.path()
         elif column == 2:
             return self._type
         elif column == 3:
@@ -34,6 +35,8 @@ class TreeItem:
         elif column == 4:
             return self._depth
         elif column == 5:
+            return self._array_level
+        elif column == 6:
             return self._source
         return None
 
@@ -65,20 +68,20 @@ class TreeModel(QAbstractItemModel):
         self.settings = settings if settings else {}
         self.source = os.path.basename(source) if source else ""
         self._root_item = TreeItem("root", data)
-        self._headers = ["Path", "Key", "Type", "Value", "Depth", "Source"]
+        self._headers = ["Key", "Path", "Type", "Value", "Depth", "Array Level", "Source"]
         self._setup_model_data(data, self._root_item)
 
-    def _setup_model_data(self, data, parent, depth=0):
+    def _setup_model_data(self, data, parent, depth=0, array_level=0):
         if isinstance(data, dict):
             for key, value in data.items():
-                item = TreeItem(key, value, parent, depth, self.source)
+                item = TreeItem(key, value, parent, depth, self.source, array_level)
                 parent.appendChild(item)
-                self._setup_model_data(value, item, depth + 1)
+                self._setup_model_data(value, item, depth + 1, array_level)
         elif isinstance(data, list):
             for i, value in enumerate(data):
-                item = TreeItem(f"[{i}]", value, parent, depth, self.source)
+                item = TreeItem(f"[{i}]", value, parent, depth, self.source, array_level + 1)
                 parent.appendChild(item)
-                self._setup_model_data(value, item, depth + 1)
+                self._setup_model_data(value, item, depth + 1, array_level + 1)
 
     def data(self, index, role):
         if not index.isValid():
