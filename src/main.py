@@ -10,9 +10,9 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QFileDialog
 from src.data_loader import load_data
 from src.tree_model import TreeModel
-from src.flat_proxy_model import FlatProxyModel
 from src.filter_proxy_model import FilterProxyModel
 from src.table_preview import TablePreviewDialog
+from src.pandas_model import PandasModel
 from src.settings_dialog import SettingsDialog
 
 class MainWindow(QMainWindow):
@@ -63,11 +63,6 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(copy_action)
         self.table_view.addAction(copy_action)
 
-        copy_path_action = QAction("Copy &Path", self)
-        copy_path_action.triggered.connect(self.copy_path)
-        edit_menu.addAction(copy_path_action)
-        self.table_view.addAction(copy_path_action)
-
         edit_menu.addSeparator()
 
         settings_action = QAction("&Settings", self)
@@ -95,47 +90,38 @@ class MainWindow(QMainWindow):
         )
         if file_path:
             try:
-                data = load_data(file_path)
-                self.source_model = TreeModel(data, settings=self.settings, source=file_path)
-
-                self.flat_proxy_model = FlatProxyModel(self)
-                self.flat_proxy_model.setSourceModel(self.source_model)
-
-                self.filter_proxy_model = FilterProxyModel(self)
-                self.filter_proxy_model.setSourceModel(self.flat_proxy_model)
-
-                self.table_view.setModel(self.filter_proxy_model)
+                raw_data, df = load_data(file_path)
+                self.source_model = TreeModel(raw_data, settings=self.settings, source=file_path)
                 self.tree_view.setModel(self.source_model)
+
+                self.pandas_model = PandasModel(df)
+                self.filter_proxy_model = FilterProxyModel(self)
+                self.filter_proxy_model.setSourceModel(self.pandas_model)
+                self.table_view.setModel(self.filter_proxy_model)
                 self.table_view.resizeColumnsToContents()
 
-                # Sync selection
+                # When the tree selection changes, update the table view
                 self.tree_view.selectionModel().selectionChanged.connect(self.sync_tree_to_table)
                 self.table_view.selectionModel().selectionChanged.connect(self.sync_table_to_tree)
             except Exception as e:
                 print(f"Error loading file: {e}")
 
+    def sync_table_to_tree(self, selected, deselected):
+        # This is a placeholder for future implementation
+        pass
+
     def sync_tree_to_table(self, selected, deselected):
         if not selected.indexes():
             return
-        source_index = selected.indexes()[0]
-        proxy_index = self.flat_proxy_model.mapFromSource(source_index)
-        if proxy_index.isValid():
-            self.table_view.selectionModel().select(proxy_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
-            self.table_view.scrollTo(proxy_index, self.table_view.ScrollHint.PositionAtCenter)
 
-    def sync_table_to_tree(self, selected, deselected):
-        if not selected.indexes():
-            return
-        proxy_index = selected.indexes()[0]
-        source_index = self.flat_proxy_model.mapToSource(proxy_index)
-        if source_index.isValid():
-            self.tree_view.selectionModel().select(source_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
-            self.tree_view.scrollTo(source_index, self.tree_view.ScrollHint.PositionAtCenter)
-            # Expand the tree to the selected item
-            parent = source_index.parent()
-            while parent.isValid():
-                self.tree_view.expand(parent)
-                parent = parent.parent()
+        index = selected.indexes()[0]
+        item = index.internalPointer()
+
+        if isinstance(item._value, list) and all(isinstance(i, dict) for i in item._value):
+            df = pd.DataFrame(item._value)
+            self.pandas_model = PandasModel(df)
+            self.filter_proxy_model.setSourceModel(self.pandas_model)
+            self.table_view.resizeColumnsToContents()
 
     def filter_text_changed(self, text):
         if hasattr(self, 'filter_proxy_model'):
@@ -153,36 +139,25 @@ class MainWindow(QMainWindow):
             self.filter_proxy_model.setFilterRegularExpression(self.filter_input.text())
 
     def copy_selection(self):
+        if not hasattr(self, 'pandas_model') or self.pandas_model._data.empty:
+            return
+
         selection = self.table_view.selectionModel().selectedIndexes()
         if not selection:
             return
 
-        rows = sorted(list(set(index.row() for index in selection)))
-        cols = sorted(list(set(index.column() for index in selection)))
+        df = self.pandas_model._data
+        selected_rows = sorted(list(set(index.row() for index in selection)))
+        selected_cols = sorted(list(set(index.column() for index in selection)))
 
-        table = [[""] * len(cols) for _ in range(len(rows))]
-        for i, row in enumerate(rows):
-            for j, col in enumerate(cols):
-                index = self.table_view.model().index(row, col)
-                table[i][j] = str(self.table_view.model().data(index))
-
+        sub_df = df.iloc[selected_rows, selected_cols]
         clipboard = QApplication.clipboard()
-        clipboard.setText("\n".join(["\t".join(row) for row in table]))
-
-    def copy_path(self):
-        selection = self.table_view.selectionModel().selectedIndexes()
-        if not selection:
-            return
-
-        index = selection[0]
-        # Path is in the second column
-        path_index = self.table_view.model().index(index.row(), 1)
-        path = self.table_view.model().data(path_index)
-
-        clipboard = QApplication.clipboard()
-        clipboard.setText(path)
+        clipboard.setText(sub_df.to_csv(sep='\t', index=False, header=True))
 
     def export_data(self):
+        if not hasattr(self, 'pandas_model') or self.pandas_model._data.empty:
+            return
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Data",
@@ -192,45 +167,33 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        model = self.table_view.model()
-        headers = [model.headerData(i, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole) for i in range(model.columnCount())]
-
-        data = []
-        for row in range(model.rowCount()):
-            row_data = [model.data(model.index(row, col)) for col in range(model.columnCount())]
-            data.append(dict(zip(headers, row_data)))
-
+        df = self.pandas_model._data
         try:
-            with open(file_path, 'w', newline='') as f:
-                if file_path.endswith('.csv'):
-                    writer = csv.DictWriter(f, fieldnames=headers, delimiter=self.settings.get("csv_delimiter", ","))
-                    writer.writeheader()
-                    writer.writerows(data)
-                elif file_path.endswith('.tsv'):
-                    writer = csv.DictWriter(f, fieldnames=headers, delimiter='\t')
-                    writer.writeheader()
-                    writer.writerows(data)
-                elif file_path.endswith('.jsonl'):
-                    for row in data:
-                        f.write(json.dumps(row) + '\n')
+            if file_path.endswith('.csv'):
+                df.to_csv(file_path, index=False, sep=self.settings.get("csv_delimiter", ","))
+            elif file_path.endswith('.tsv'):
+                df.to_csv(file_path, index=False, sep='\t')
+            elif file_path.endswith('.jsonl'):
+                df.to_json(file_path, orient='records', lines=True)
         except Exception as e:
             print(f"Error exporting data: {e}")
 
 
     def show_table_preview(self):
+        if not hasattr(self, 'pandas_model') or self.pandas_model._data.empty:
+            return
+
         selection = self.table_view.selectionModel().selectedIndexes()
         if not selection:
             return
 
-        model = self.table_view.model()
-        rows = sorted(list(set(index.row() for index in selection)))
-        cols = sorted(list(set(index.column() for index in selection)))
+        df = self.pandas_model._data
+        selected_rows = sorted(list(set(index.row() for index in selection)))
+        selected_cols = sorted(list(set(index.column() for index in selection)))
 
-        headers = [model.headerData(c, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole) for c in cols]
-        data = []
-        for r in rows:
-            row_data = [model.data(model.index(r, c)) for c in cols]
-            data.append(row_data)
+        sub_df = df.iloc[selected_rows, selected_cols]
+        headers = sub_df.columns.tolist()
+        data = sub_df.values.tolist()
 
         dialog = TablePreviewDialog(data, headers, self)
         dialog.exec()
